@@ -909,4 +909,705 @@ const App: React.FC = () => {
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-gray-100 rounded-full overflow-hidden">
-                          {u.avatarUrl ? <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover
+                          {u.avatarUrl ? <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover"/> : <UserIcon className="text-gray-400 m-3" size={24} />}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900 flex items-center gap-1">
+                            {u.name} 
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${u.role === UserRole.PRODUCER ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>{u.role}</span>
+                          </h3>
+                          <p className="text-sm text-gray-500">{u.email}</p>
+                          {u.location && <p className="text-xs text-gray-400 flex items-center gap-1 mt-1"><MapPin size={10}/> {u.location}</p>}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Buttons */}
+                    <div className="flex gap-2 mt-4">
+                        {adminTab === 'PENDING' ? (
+                            <>
+                                <button onClick={() => handleAdminAction(u.id, 'APPROVE')} className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700">Approve</button>
+                                <button onClick={() => handleAdminAction(u.id, 'REJECT')} className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Reject</button>
+                            </>
+                        ) : (
+                            <button onClick={() => handleAdminAction(u.id, 'APPROVE')} className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center justify-center gap-2"><RotateCcw size={14}/> Restore</button>
+                        )}
+                    </div>
+                    {u.role === UserRole.PRODUCER && u.bio && (
+                        <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600 italic border border-gray-100">
+                            "{u.bio}"
+                        </div>
+                    )}
+                  </div>
+                ))}
+                {users.filter(u => u.status === adminTab).length === 0 && (
+                  <div className="col-span-full py-12 text-center text-gray-500">
+                     No users in this list.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* VIEW: MARKETPLACE */}
+        {currentView === 'MARKETPLACE' && (
+          <div className="p-6 max-w-7xl mx-auto w-full animate-fadeIn">
+            {/* SEARCH AND FILTER BAR */}
+            <div className="mb-8">
+              <div className="flex flex-col md:flex-row gap-4 mb-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                  <input 
+                    type="text" 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search for fresh produce, honey, eggs..." 
+                    className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-200 shadow-sm focus:ring-2 focus:ring-leaf-500 focus:outline-none"
+                  />
+                  {searchTerm && (
+                    <button onClick={handleSmartSearch} disabled={isSearchingSmart} className="absolute right-3 top-1/2 -translate-y-1/2 text-leaf-600 hover:bg-leaf-50 p-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors">
+                      {isSearchingSmart ? <span className="animate-spin">⌛</span> : <Sparkles size={14} />}
+                      AI Smart Search
+                    </button>
+                  )}
+                </div>
+                <div className={`flex flex-col md:flex-row gap-4 p-3 rounded-xl border transition-all ${showAvailableOnly ? 'bg-leaf-50 border-leaf-200' : 'bg-white border-gray-200'}`}>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={showAvailableOnly} 
+                      onChange={(e) => {
+                        setShowAvailableOnly(e.target.checked);
+                        if (e.target.checked && !filterStartDate) {
+                          setFilterStartDate(new Date().toISOString().split('T')[0]);
+                        }
+                      }}
+                      className="w-5 h-5 text-leaf-600 rounded focus:ring-leaf-500" 
+                    />
+                    <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Filter Availability</span>
+                  </label>
+                  
+                  {showAvailableOnly && (
+                    <div className="flex items-center gap-2 animate-fadeIn">
+                      <div className="flex flex-col">
+                         <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider ml-1">From</span>
+                         <input 
+                           type="date" 
+                           min={new Date().toISOString().split('T')[0]}
+                           value={filterStartDate}
+                           onChange={(e) => setFilterStartDate(e.target.value)}
+                           className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-leaf-500"
+                         />
+                      </div>
+                      <span className="text-gray-400 mt-4"><ArrowRight size={16}/></span>
+                       <div className="flex flex-col">
+                         <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider ml-1">Until</span>
+                         <input 
+                           type="date" 
+                           min={filterStartDate || new Date().toISOString().split('T')[0]}
+                           value={filterEndDate}
+                           onChange={(e) => setFilterEndDate(e.target.value)}
+                           className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-leaf-500"
+                         />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Categories and AI Chips */}
+              <div className="flex items-center justify-between">
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                   {categories.map(cat => (
+                     <button 
+                       key={cat}
+                       onClick={() => setSelectedCategory(cat)}
+                       className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedCategory === cat ? 'bg-leaf-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
+                     >
+                       {cat}
+                     </button>
+                   ))}
+                </div>
+                <button 
+                  onClick={handleAiRecipe} 
+                  disabled={isGeneratingRecipe || filteredProducts.length === 0}
+                  className="hidden md:flex items-center gap-2 text-leaf-700 bg-leaf-50 px-4 py-2 rounded-full text-sm font-medium hover:bg-leaf-100 transition-colors"
+                >
+                  {isGeneratingRecipe ? <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full"/> : <ChefHat size={18} />}
+                  Suggest Recipe
+                </button>
+              </div>
+
+              {smartKeywords.length > 0 && (
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <span className="text-xs text-gray-400 py-1">Smart Results:</span>
+                  {smartKeywords.map(kw => (
+                    <span key={kw} className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-xs font-medium border border-purple-100 flex items-center gap-1">
+                      <Sparkles size={10} /> {kw}
+                    </span>
+                  ))}
+                  <button onClick={() => {setSmartKeywords([]); setSearchTerm('');}} className="text-xs text-gray-400 underline hover:text-gray-600 ml-2">Clear</button>
+                </div>
+              )}
+            </div>
+
+            {/* PRODUCT GRID */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {filteredProducts.map(product => {
+                const producer = users.find(u => u.id === product.producerId);
+                const isSaved = wishlist.includes(product.id);
+                const showMap = mapVisibleProductIds.has(product.id);
+
+                return (
+                  <div key={product.id} className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-white/50 overflow-hidden flex flex-col group animate-fadeIn">
+                    <div className="relative h-48 overflow-hidden bg-gray-100">
+                      {showMap ? (
+                        <iframe 
+                          width="100%" 
+                          height="100%" 
+                          frameBorder="0" 
+                          style={{border:0}} 
+                          src={`https://maps.google.com/maps?q=${encodeURIComponent(producer?.location || '')}&output=embed`}
+                          allowFullScreen
+                        ></iframe>
+                      ) : (
+                        <img 
+                          src={product.imageUrl} 
+                          alt={product.name} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                      )}
+                      
+                      {currentUser?.role === 'CONSUMER' && (
+                         <button 
+                           onClick={(e) => { e.stopPropagation(); toggleWishlist(product.id); }}
+                           className="absolute top-3 right-3 p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-sm hover:bg-white transition-colors"
+                         >
+                           <Heart size={18} className={isSaved ? "fill-red-500 text-red-500" : "text-gray-400"} />
+                         </button>
+                      )}
+                      
+                      {/* Map Toggle Button */}
+                      {producer?.location && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleProductMap(product.id); }}
+                          className="absolute bottom-3 right-3 p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-sm hover:bg-white transition-colors text-gray-600"
+                          title="Toggle Map View"
+                        >
+                          {showMap ? <ImageIcon size={16}/> : <MapPin size={16}/>}
+                        </button>
+                      )}
+
+                      {!product.inStock && (
+                        <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center">
+                          <span className="bg-gray-800 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide">Out of Stock</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="p-4 flex-1 flex flex-col cursor-pointer" onClick={() => setSelectedProduct(product)}>
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-[10px] font-bold tracking-wider text-leaf-600 uppercase">{product.category}</span>
+                        <div className="flex items-center text-yellow-400 text-xs gap-0.5">
+                           <Star size={12} fill="currentColor"/> 
+                           <span className="text-gray-600 ml-0.5">{getProducerRating(product.producerId).toFixed(1)}</span>
+                        </div>
+                      </div>
+                      <h3 className="font-bold text-gray-900 mb-1 leading-tight group-hover:text-leaf-700 transition-colors">{product.name}</h3>
+                      
+                      <div 
+                        className="flex items-center gap-1 mb-3 cursor-pointer group/producer" 
+                        onClick={(e) => { e.stopPropagation(); setSelectedProducer(producer || null); }}
+                      >
+                         <p className="text-xs text-gray-500 truncate group-hover/producer:text-leaf-600 group-hover/producer:underline transition-colors">{producer?.name}</p>
+                         {producer?.status === UserStatus.APPROVED && <VerifiedBadge />}
+                      </div>
+
+                      {product.availableFrom && (
+                         <div className="text-[10px] text-gray-400 mb-3 flex items-center gap-1">
+                            <Calendar size={10}/> {product.availableFrom.slice(5)} → {product.availableUntil?.slice(5)}
+                         </div>
+                      )}
+
+                      <div className="mt-auto flex items-center justify-between">
+                        <p className="font-bold text-gray-900 text-lg">${product.price.toFixed(2)} <span className="text-sm font-normal text-gray-500">/ {product.unit}</span></p>
+                        <button className="bg-leaf-600 text-white p-2 rounded-lg hover:bg-leaf-700 transition-colors shadow-sm shadow-leaf-200">
+                          <Plus size={20} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW: CONSUMER WISHLIST */}
+        {currentView === 'WISHLIST' && (
+          <div className="p-6 max-w-7xl mx-auto w-full animate-fadeIn">
+            <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <Heart className="text-red-500 fill-red-500" /> My Wishlist
+            </h1>
+            {wishlist.length === 0 ? (
+               <div className="text-center py-20 bg-white/50 rounded-2xl border border-dashed border-gray-300">
+                 <p className="text-gray-500 text-lg">Your wishlist is empty.</p>
+                 <button onClick={() => setCurrentView('MARKETPLACE')} className="mt-4 text-leaf-600 font-medium hover:underline">Browse Products</button>
+               </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                 {products.filter(p => wishlist.includes(p.id)).map(product => {
+                    // Reuse Product Card Logic (Simplified)
+                    return (
+                      <div key={product.id} className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 overflow-hidden flex flex-col">
+                        <div className="relative h-48 bg-gray-100">
+                           <img src={product.imageUrl} className="w-full h-full object-cover" />
+                           <button onClick={() => toggleWishlist(product.id)} className="absolute top-3 right-3 p-2 bg-white rounded-full shadow text-red-500"><X size={16}/></button>
+                        </div>
+                        <div className="p-4">
+                           <h3 className="font-bold text-gray-900">{product.name}</h3>
+                           <p className="text-leaf-600 font-bold mt-2">${product.price.toFixed(2)}</p>
+                        </div>
+                      </div>
+                    );
+                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* VIEW: MESSAGES */}
+        {currentView === 'MESSAGES' && currentUser && (
+          <div className="p-6 max-w-6xl mx-auto w-full h-full flex flex-col animate-fadeIn">
+            <h1 className="text-2xl font-bold text-gray-800 mb-6">Messages</h1>
+            <ChatInterface 
+              currentUser={currentUser}
+              users={users}
+              messages={messages}
+              initialSelectedUserId={activeConversationId}
+              onSendMessage={(receiverId, content) => {
+                const newMessage: Message = {
+                  id: `m${Date.now()}`,
+                  senderId: currentUser.id,
+                  receiverId,
+                  content,
+                  timestamp: Date.now()
+                };
+                setMessages([...messages, newMessage]);
+              }}
+            />
+          </div>
+        )}
+
+        {/* VIEW: PRODUCER DASHBOARD */}
+        {currentView === 'DASHBOARD' && currentUser?.role === UserRole.PRODUCER && (
+          <div className="p-6 max-w-6xl mx-auto w-full animate-fadeIn">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-800">Producer Dashboard</h1>
+                <p className="text-gray-500">Manage your farm profile and inventory</p>
+              </div>
+              <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200 flex items-center gap-3">
+                 <div className="text-right">
+                   <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Rating</p>
+                   <div className="flex items-center gap-1 text-yellow-400 font-bold">
+                     <span className="text-gray-800 text-lg">{getProducerRating(currentUser.id).toFixed(1)}</span> <Star size={16} fill="currentColor"/>
+                   </div>
+                 </div>
+                 <div className="h-8 w-px bg-gray-200"></div>
+                 <div className="text-right">
+                   <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Reviews</p>
+                   <p className="text-gray-800 font-bold text-lg">{getProducerReviewCount(currentUser.id)}</p>
+                 </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Left Col: Profile & Add Product */}
+              <div className="space-y-6">
+                {/* Profile Card */}
+                <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
+                   <div className="flex justify-between items-start mb-4">
+                     <h2 className="font-bold text-lg text-gray-800">My Profile</h2>
+                     {!isEditingProfile && <button onClick={() => { setEditName(currentUser.name); setEditLocation(currentUser.location || ''); setEditBio(currentUser.bio || ''); setIsEditingProfile(true); }} className="text-leaf-600 hover:bg-leaf-50 p-2 rounded-lg transition-colors"><Edit2 size={18}/></button>}
+                   </div>
+                   
+                   {isEditingProfile ? (
+                     <div className="space-y-3">
+                        <input className="w-full p-2 border rounded text-sm" value={editName} onChange={e => setEditName(e.target.value)} placeholder="Name"/>
+                        <input className="w-full p-2 border rounded text-sm" value={editLocation} onChange={e => setEditLocation(e.target.value)} placeholder="Location"/>
+                        <textarea className="w-full p-2 border rounded text-sm" value={editBio} onChange={e => setEditBio(e.target.value)} rows={3} placeholder="Bio"/>
+                        <div className="flex gap-2">
+                          <button onClick={handleSaveProfile} className="flex-1 bg-leaf-600 text-white py-1.5 rounded text-sm">Save</button>
+                          <button onClick={() => setIsEditingProfile(false)} className="flex-1 border border-gray-300 py-1.5 rounded text-sm">Cancel</button>
+                        </div>
+                     </div>
+                   ) : (
+                     <>
+                        <div className="flex items-center gap-4 mb-4">
+                          <div className="w-16 h-16 bg-gray-100 rounded-full overflow-hidden">
+                             {currentUser.avatarUrl ? <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-full h-full object-cover"/> : <UserIcon className="text-gray-400 m-4"/>}
+                          </div>
+                          <div>
+                             <h3 className="font-bold text-gray-900 flex items-center gap-1">{currentUser.name} {currentUser.status === UserStatus.APPROVED && <VerifiedBadge />}</h3>
+                             <p className="text-sm text-gray-500 flex items-center gap-1"><MapPin size={12}/> {currentUser.location}</p>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-600 italic border-l-2 border-leaf-300 pl-3">{currentUser.bio}</p>
+                     </>
+                   )}
+                </div>
+
+                {/* Add Product Form */}
+                <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
+                  <h2 className="font-bold text-lg text-gray-800 mb-4">{editingProductId ? 'Edit Product' : 'Add New Product'}</h2>
+                  <div className="space-y-4">
+                    <input type="text" value={newProdName} onChange={e => setNewProdName(e.target.value)} placeholder="Product Name (e.g. Heirloom Carrots)" className="w-full p-3 bg-gray-50 border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-leaf-500 focus:outline-none" />
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                       <select value={newProdCat} onChange={e => setNewProdCat(e.target.value)} className="p-3 bg-gray-50 border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-leaf-500 focus:outline-none">
+                         <option>Vegetables</option><option>Fruits</option><option>Dairy & Eggs</option><option>Pantry</option><option>Meat</option>
+                       </select>
+                       <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                          <input type="number" value={newProdPrice} onChange={e => setNewProdPrice(e.target.value)} placeholder="0.00" className="w-full pl-6 p-3 bg-gray-50 border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-leaf-500 focus:outline-none" />
+                       </div>
+                    </div>
+                    
+                    {/* Image Upload */}
+                    <div className="relative group">
+                       <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="prod-image-upload" />
+                       <label htmlFor="prod-image-upload" className="block w-full h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-leaf-400 hover:bg-leaf-50 transition-colors bg-gray-50 overflow-hidden relative">
+                          {newProdImage ? (
+                            <>
+                              <img src={newProdImage} alt="Preview" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span className="text-white text-xs font-medium flex items-center gap-1"><Upload size={14}/> Change</span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-center text-gray-400">
+                              <ImageIcon size={24} className="mx-auto mb-2"/>
+                              <span className="text-xs">Upload Photo (Max 5MB)</span>
+                            </div>
+                          )}
+                       </label>
+                       {newProdImage && (
+                          <button onClick={(e) => {e.preventDefault(); setNewProdImage(null);}} className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-sm text-gray-500 hover:text-red-500"><X size={14}/></button>
+                       )}
+                    </div>
+                    {imageError && <p className="text-xs text-red-500">{imageError}</p>}
+
+                    <div className="relative">
+                      <textarea value={newProdDesc} onChange={e => setNewProdDesc(e.target.value)} placeholder="Description..." rows={3} className="w-full p-3 bg-gray-50 border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-leaf-500 focus:outline-none" />
+                      <button 
+                        onClick={handleGenerateDescription} 
+                        disabled={isGeneratingDesc}
+                        title={newProdName.trim() ? "Generate Description with AI" : "Enter product name first"}
+                        className={`absolute right-2 bottom-2 p-2 rounded-lg transition-colors ${newProdName.trim() ? 'text-leaf-600 hover:bg-leaf-100' : 'text-gray-300 cursor-not-allowed'}`}
+                      >
+                         {isGeneratingDesc ? <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full"/> : <Sparkles size={16} />}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                       <div>
+                         <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1 block">Available From</label>
+                         <input type="date" value={newProdAvailableFrom} onChange={e => setNewProdAvailableFrom(e.target.value)} className="w-full p-2 bg-gray-50 border-gray-200 rounded-lg text-xs" />
+                       </div>
+                       <div>
+                         <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1 block">Until</label>
+                         <input type="date" value={newProdAvailableUntil} onChange={e => setNewProdAvailableUntil(e.target.value)} className="w-full p-2 bg-gray-50 border-gray-200 rounded-lg text-xs" />
+                       </div>
+                    </div>
+
+                    <button onClick={handleAddProduct} className="w-full bg-leaf-600 text-white py-3 rounded-xl font-medium hover:bg-leaf-700 transition-colors shadow-lg shadow-leaf-200 flex items-center justify-center gap-2">
+                       {editingProductId ? <><Check size={18}/> Update Product</> : <><Plus size={18}/> Add Product</>}
+                    </button>
+                    {editingProductId && <button onClick={() => { setEditingProductId(null); setNewProdName(''); setNewProdDesc(''); setNewProdPrice(''); setNewProdImage(null); }} className="w-full text-gray-500 text-sm hover:underline">Cancel Edit</button>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Col: Inventory */}
+              <div className="lg:col-span-2 space-y-6">
+                 {/* Inventory Header & Toggle */}
+                 <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-white/50 p-4 flex justify-between items-center">
+                    <h2 className="font-bold text-gray-800">My Inventory</h2>
+                    <div className="bg-gray-100 p-1 rounded-lg flex text-sm">
+                      <button onClick={() => setInventoryView('LIST')} className={`px-3 py-1.5 rounded-md transition-all ${inventoryView === 'LIST' ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-700'}`}>List</button>
+                      <button onClick={() => setInventoryView('CALENDAR')} className={`px-3 py-1.5 rounded-md transition-all ${inventoryView === 'CALENDAR' ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-700'}`}>Calendar</button>
+                    </div>
+                 </div>
+
+                 {inventoryView === 'CALENDAR' ? renderProducerCalendar() : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fadeIn">
+                       {products.filter(p => p.producerId === currentUser.id).map(p => (
+                         <div key={p.id} className="bg-white rounded-xl border border-gray-200 p-4 flex gap-4 hover:border-leaf-300 transition-colors group">
+                           <img src={p.imageUrl} alt={p.name} className="w-20 h-20 rounded-lg object-cover bg-gray-100" />
+                           <div className="flex-1">
+                             <div className="flex justify-between items-start">
+                               <h3 className="font-bold text-gray-900">{p.name}</h3>
+                               <button onClick={() => { 
+                                 setEditingProductId(p.id); 
+                                 setNewProdName(p.name); 
+                                 setNewProdCat(p.category); 
+                                 setNewProdDesc(p.description); 
+                                 setNewProdPrice(p.price.toString()); 
+                                 setNewProdAvailableFrom(p.availableFrom || ''); 
+                                 setNewProdAvailableUntil(p.availableUntil || ''); 
+                                 setNewProdImage(p.imageUrl);
+                               }} className="text-gray-400 hover:text-leaf-600 p-1"><Edit2 size={16}/></button>
+                             </div>
+                             <p className="text-sm text-gray-500 mb-2 truncate">{p.description}</p>
+                             <div className="flex justify-between items-end">
+                               <span className="text-leaf-700 font-bold bg-leaf-50 px-2 py-0.5 rounded text-sm">${p.price}</span>
+                               <span className={`text-xs px-2 py-1 rounded-full ${p.inStock ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                 {p.inStock ? 'In Stock' : 'Sold Out'}
+                               </span>
+                             </div>
+                           </div>
+                         </div>
+                       ))}
+                       {products.filter(p => p.producerId === currentUser.id).length === 0 && (
+                         <div className="col-span-full py-10 text-center text-gray-500 border-2 border-dashed border-gray-200 rounded-xl">
+                            No products yet. Add your first item!
+                         </div>
+                       )}
+                    </div>
+                 )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* --- MODALS --- */}
+      
+      {/* AI RECIPE MODAL */}
+      {aiRecipe && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl animate-modalPop relative">
+            <button onClick={() => setAiRecipe(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={24} /></button>
+            <div className="flex items-center gap-3 mb-4 text-leaf-700">
+               <ChefHat size={32} />
+               <h2 className="text-2xl font-bold">Chef's Suggestion</h2>
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">{aiRecipe.title}</h3>
+            <div className="mb-4">
+              <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Ingredients</h4>
+              <ul className="list-disc pl-5 space-y-1 text-gray-700">
+                {aiRecipe.ingredients.map((ing, i) => <li key={i}>{ing}</li>)}
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Instructions</h4>
+              <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{aiRecipe.instructions}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PRODUCT DETAILS MODAL */}
+      {selectedProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn" onClick={() => setSelectedProduct(null)}>
+           <div className="bg-white rounded-3xl max-w-4xl w-full overflow-hidden shadow-2xl flex flex-col md:flex-row animate-modalPop" onClick={e => e.stopPropagation()}>
+              <div className="md:w-1/2 h-64 md:h-auto bg-gray-100 relative">
+                 <img src={selectedProduct.imageUrl} className="w-full h-full object-cover" />
+                 {currentUser?.role === 'CONSUMER' && (
+                    <button 
+                      onClick={() => toggleWishlist(selectedProduct.id)}
+                      className="absolute top-4 right-4 p-3 bg-white/80 backdrop-blur rounded-full shadow-lg hover:bg-white transition-all hover:scale-110"
+                    >
+                      <Heart size={24} className={wishlist.includes(selectedProduct.id) ? "fill-red-500 text-red-500" : "text-gray-600"} />
+                    </button>
+                 )}
+              </div>
+              <div className="md:w-1/2 p-8 flex flex-col relative">
+                 <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded-full"><X size={24} className="text-gray-400"/></button>
+                 
+                 <div className="mb-2">
+                    <span className="text-leaf-600 font-bold uppercase tracking-wider text-xs bg-leaf-50 px-3 py-1 rounded-full">{selectedProduct.category}</span>
+                 </div>
+                 <h2 className="text-3xl font-bold text-gray-900 mb-2">{selectedProduct.name}</h2>
+                 
+                 {/* Producer Info Link */}
+                 <div 
+                   className="flex items-center gap-2 mb-6 cursor-pointer hover:bg-gray-50 p-2 -ml-2 rounded-lg transition-colors w-fit"
+                   onClick={() => {
+                      const producer = users.find(u => u.id === selectedProduct.producerId);
+                      if (producer) {
+                        setSelectedProduct(null);
+                        setSelectedProducer(producer);
+                      }
+                   }}
+                 >
+                    <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden">
+                       <UserIcon className="m-1.5 text-gray-500" size={20}/>
+                    </div>
+                    <div>
+                       <p className="text-sm text-gray-500">Sold by</p>
+                       <p className="font-semibold text-gray-900 flex items-center gap-1">
+                         {users.find(u => u.id === selectedProduct.producerId)?.name}
+                         {users.find(u => u.id === selectedProduct.producerId)?.status === UserStatus.APPROVED && <VerifiedBadge />}
+                       </p>
+                    </div>
+                 </div>
+
+                 <p className="text-gray-600 leading-relaxed mb-6">{selectedProduct.description}</p>
+                 
+                 {selectedProduct.availableFrom && (
+                   <div className="bg-blue-50 text-blue-800 px-4 py-3 rounded-xl mb-6 flex items-center gap-3">
+                      <Calendar size={20} />
+                      <div>
+                        <p className="text-xs font-bold uppercase opacity-70">Seasonality</p>
+                        <p className="font-medium">Available {selectedProduct.availableFrom} to {selectedProduct.availableUntil}</p>
+                      </div>
+                   </div>
+                 )}
+
+                 <div className="mt-auto pt-6 border-t border-gray-100 flex items-center justify-between">
+                    <div>
+                       <p className="text-3xl font-bold text-gray-900">${selectedProduct.price.toFixed(2)}</p>
+                       <p className="text-gray-500">per {selectedProduct.unit}</p>
+                    </div>
+                    {/* Simplified Contact Button if needed or generic add to cart */}
+                    <button className="bg-leaf-600 text-white px-8 py-3 rounded-xl font-bold text-lg hover:bg-leaf-700 transition-shadow shadow-lg shadow-leaf-200 transform active:scale-95">
+                       Add to Basket
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* PRODUCER PROFILE MODAL */}
+      {selectedProducer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn" onClick={() => setSelectedProducer(null)}>
+           <div className="bg-white rounded-2xl max-w-2xl w-full p-8 shadow-2xl relative animate-modalPop max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setSelectedProducer(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={24}/></button>
+              
+              <div className="flex items-start gap-6 mb-8">
+                 <div className="w-24 h-24 rounded-full bg-gray-200 shrink-0 overflow-hidden shadow-md">
+                   {selectedProducer.avatarUrl ? <img src={selectedProducer.avatarUrl} className="w-full h-full object-cover"/> : <UserIcon className="w-full h-full p-6 text-gray-400"/>}
+                 </div>
+                 <div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+                      {selectedProducer.name} 
+                      {selectedProducer.status === UserStatus.APPROVED && <VerifiedBadge />}
+                    </h2>
+                    <p className="text-gray-500 flex items-center gap-1 mb-2"><MapPin size={16}/> {selectedProducer.location}</p>
+                    
+                    {/* Show email only to logged in consumers/admin */}
+                    {currentUser && (currentUser.role === UserRole.CONSUMER || currentUser.role === UserRole.ADMIN) && (
+                      <p className="text-sm text-gray-600 flex items-center gap-1.5 mb-2 bg-gray-50 px-2 py-1 rounded w-fit">
+                        <Mail size={14}/> {selectedProducer.email}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-4 text-sm mt-3">
+                       <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-lg border border-yellow-100">
+                          <Star size={16} className="text-yellow-400 fill-yellow-400"/> 
+                          <span className="font-bold text-gray-800">{getProducerRating(selectedProducer.id).toFixed(1)}</span>
+                          <span className="text-gray-500">({getProducerReviewCount(selectedProducer.id)} reviews)</span>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Action Buttons */}
+              {currentUser?.role === UserRole.CONSUMER && (
+                <div className="flex gap-3 mb-8">
+                  <button 
+                    onClick={() => handleContactProducer(selectedProducer.id)} 
+                    className="flex-1 bg-leaf-600 text-white py-2.5 rounded-xl font-semibold hover:bg-leaf-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <MessageSquare size={18}/> Contact Producer
+                  </button>
+                  <button 
+                    onClick={() => setIsReviewFormOpen(!isReviewFormOpen)}
+                    className="flex-1 bg-white border border-gray-300 text-gray-700 py-2.5 rounded-xl font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Star size={18}/> {isReviewFormOpen ? 'Cancel Review' : 'Write a Review'}
+                  </button>
+                </div>
+              )}
+
+              {/* Bio Section */}
+              <div className="mb-8">
+                <h3 className="font-bold text-gray-800 mb-2">About Us</h3>
+                <p className="text-gray-600 leading-relaxed">{selectedProducer.bio || "No bio available."}</p>
+              </div>
+
+              {/* Location Map */}
+              {selectedProducer.location && (
+                <div className="mb-8">
+                   <h3 className="font-bold text-gray-800 mb-2">Location</h3>
+                   <div className="w-full h-48 bg-gray-100 rounded-xl overflow-hidden border border-gray-200">
+                     <iframe 
+                        width="100%" 
+                        height="100%" 
+                        frameBorder="0" 
+                        style={{border:0}} 
+                        src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedProducer.location)}&output=embed`}
+                        allowFullScreen
+                      ></iframe>
+                   </div>
+                </div>
+              )}
+
+              {/* Review Form */}
+              {isReviewFormOpen && (
+                <div className="bg-gray-50 p-4 rounded-xl mb-8 animate-fadeIn border border-gray-200">
+                   <h3 className="font-bold text-gray-800 mb-3">Leave a Review</h3>
+                   <div className="flex gap-2 mb-3">
+                     {[1,2,3,4,5].map(star => (
+                       <button key={star} onClick={() => setNewReviewRating(star)} type="button">
+                         <Star size={24} className={star <= newReviewRating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"} />
+                       </button>
+                     ))}
+                   </div>
+                   <textarea 
+                     value={newReviewComment}
+                     onChange={(e) => setNewReviewComment(e.target.value)}
+                     className="w-full p-3 border border-gray-300 rounded-lg mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-leaf-500"
+                     placeholder="Share your experience..."
+                     rows={3}
+                   />
+                   <button 
+                     onClick={handleAddReview}
+                     className="bg-leaf-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-leaf-700"
+                   >
+                     Submit Review
+                   </button>
+                </div>
+              )}
+
+              {/* Reviews List */}
+              <div>
+                 <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">Reviews <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full text-gray-500">{getProducerReviewCount(selectedProducer.id)}</span></h3>
+                 <div className="space-y-4">
+                    {reviews.filter(r => r.producerId === selectedProducer.id).map(review => (
+                       <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0">
+                          <div className="flex justify-between items-center mb-1">
+                             <span className="font-semibold text-gray-900">{review.userName}</span>
+                             <span className="text-xs text-gray-400">{new Date(review.timestamp).toLocaleDateString()}</span>
+                          </div>
+                          <div className="mb-2">{renderStars(review.rating)}</div>
+                          <p className="text-sm text-gray-600">{review.comment}</p>
+                       </div>
+                    ))}
+                    {reviews.filter(r => r.producerId === selectedProducer.id).length === 0 && (
+                      <p className="text-gray-400 text-sm italic">No reviews yet.</p>
+                    )}
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+export default App;
