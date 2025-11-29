@@ -195,6 +195,8 @@ const App: React.FC = () => {
 
   const handleSubmitReview = () => {
     if (!selectedProducer) return;
+    if (!newReviewComment.trim()) return; // Validation: Prevent empty comments
+
     const newReview: Review = {
       id: Date.now().toString(),
       producerId: selectedProducer.id,
@@ -846,12 +848,15 @@ const App: React.FC = () => {
                     >
                        <MessageCircle className="w-4 h-4" /> Message Producer
                     </button>
-                    <button 
-                       onClick={() => setIsReviewFormOpen(!isReviewFormOpen)}
-                       className="flex-1 bg-white border border-gray-200 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-                    >
-                       <Star className="w-4 h-4" /> Write a Review
-                    </button>
+                    {currentUser.role === UserRole.CONSUMER && (
+                      <button 
+                         onClick={() => setIsReviewFormOpen(!isReviewFormOpen)}
+                         className={`flex-1 border py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${isReviewFormOpen ? 'bg-gray-100 border-gray-300 text-gray-900' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                      >
+                         {isReviewFormOpen ? <XCircle className="w-4 h-4"/> : <Star className="w-4 h-4"/>}
+                         {isReviewFormOpen ? 'Cancel Review' : 'Write a Review'}
+                      </button>
+                    )}
                  </div>
 
                  {isReviewFormOpen && (
