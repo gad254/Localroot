@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   User, UserRole, UserStatus, Product, Message, ViewState, RecipeSuggestion, Review
@@ -198,8 +197,8 @@ const App: React.FC = () => {
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     setGeneratedCode(code);
     
-    // Mock Send Email (Also shown in UI now)
-    // alert(`[MOCK EMAIL SERVER]\nTo: ${signupData.email}\nSubject: Verify your LocalRoots account\n\nYour security code is: ${code}`);
+    // Mock Send Email
+    alert(`[MOCK EMAIL SERVER]\nTo: ${signupData.email}\nSubject: Verify your LocalRoots account\n\nYour security code is: ${code}`);
 
     setPendingUser({
       ...signupData,
@@ -215,7 +214,7 @@ const App: React.FC = () => {
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     setGeneratedCode(code);
     setResendCountdown(30);
-    // alert(`[MOCK EMAIL SERVER]\nTo: ${pendingUser?.email}\nSubject: NEW Security Code\n\nYour new code is: ${code}`);
+    alert(`[MOCK EMAIL SERVER]\nTo: ${pendingUser?.email}\nSubject: NEW Security Code\n\nYour new code is: ${code}`);
   };
 
   const handleVerifySubmit = (e: React.FormEvent) => {
@@ -552,8 +551,14 @@ const App: React.FC = () => {
   // --- LOGIN SCREEN ---
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 animate-fadeIn">
+      <div className="min-h-screen relative flex items-center justify-center p-4">
+        {/* Background Image */}
+        <div className="absolute inset-0 z-0">
+           <img src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=2832&auto=format&fit=crop" className="w-full h-full object-cover" alt="Farm Background" />
+           <div className="absolute inset-0 bg-amber-50/80 backdrop-blur-[2px]"></div>
+        </div>
+
+        <div className="relative z-10 bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl w-full max-w-md p-8 animate-fadeIn border border-white/50">
           <div className="flex justify-center mb-6">
             <div className="bg-leaf-100 p-3 rounded-full">
               <Sprout size={32} className="text-leaf-600" />
@@ -640,12 +645,6 @@ const App: React.FC = () => {
               <div className="text-center">
                  <p className="text-sm text-gray-600 mb-4">We sent a 4-digit code to <span className="font-semibold">{pendingUser?.email}</span></p>
                  
-                 {/* DEMO HINT TO FIX ISSUE */}
-                 <div className="bg-blue-50 border border-blue-100 text-blue-600 px-4 py-2 rounded-lg mb-4 text-xs text-center">
-                   <span className="font-bold">DEMO HINT:</span> Since this is a demo, your code is 
-                   <span className="font-mono font-bold text-lg ml-2">{generatedCode}</span>
-                 </div>
-
                  <input type="text" maxLength={4} value={verificationCode} onChange={e => setVerificationCode(e.target.value.replace(/\D/g,''))} className="w-32 text-center text-3xl tracking-[0.5em] p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-leaf-500 font-mono mx-auto block" placeholder="0000" />
               </div>
               <div className="flex flex-col gap-3">
@@ -668,9 +667,15 @@ const App: React.FC = () => {
 
   // --- MAIN APP ---
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen relative overflow-hidden">
+      {/* BACKGROUND IMAGE FOR MAIN APP */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <img src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=2832&auto=format&fit=crop" className="w-full h-full object-cover" alt="Farm Background" />
+        <div className="absolute inset-0 bg-amber-50/80 backdrop-blur-[2px]"></div>
+      </div>
+
       {/* SIDEBAR */}
-      <div className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-gray-200 transition-all duration-300 flex flex-col z-20 shadow-xl`}>
+      <div className={`${isSidebarOpen ? 'w-64' : 'w-20'} relative z-20 bg-white/95 backdrop-blur-sm border-r border-gray-200 transition-all duration-300 flex flex-col shadow-xl`}>
         <div className="p-4 flex items-center justify-between h-16 border-b border-gray-200">
           <div className={`flex items-center gap-2 ${!isSidebarOpen && 'justify-center w-full'}`}>
              <Sprout className="text-leaf-600" size={28} />
@@ -748,20 +753,20 @@ const App: React.FC = () => {
       </div>
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 overflow-auto flex flex-col">
+      <div className="flex-1 overflow-auto flex flex-col relative z-10">
         {/* VIEW: ADMIN DASHBOARD */}
         {currentView === 'ADMIN' && (
           <div className="p-6 max-w-6xl mx-auto w-full animate-fadeIn">
-            <h1 className="text-2xl font-bold text-gray-800 mb-6">Admin Dashboard</h1>
+            <h1 className="text-2xl font-bold text-gray-800 mb-6 drop-shadow-sm">Admin Dashboard</h1>
             
-            <div className="flex gap-4 mb-6 border-b border-gray-200 pb-1">
-              <button onClick={() => setAdminTab('PENDING')} className={`pb-3 px-2 font-medium transition-colors border-b-2 ${adminTab === 'PENDING' ? 'border-leaf-600 text-leaf-600' : 'border-transparent text-gray-500'}`}>Pending Approvals</button>
-              <button onClick={() => setAdminTab('REJECTED')} className={`pb-3 px-2 font-medium transition-colors border-b-2 ${adminTab === 'REJECTED' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500'}`}>Rejected Users</button>
+            <div className="flex gap-4 mb-6 border-b border-gray-300/50 pb-1">
+              <button onClick={() => setAdminTab('PENDING')} className={`pb-3 px-2 font-medium transition-colors border-b-2 ${adminTab === 'PENDING' ? 'border-leaf-600 text-leaf-800' : 'border-transparent text-gray-600'}`}>Pending Approvals</button>
+              <button onClick={() => setAdminTab('REJECTED')} className={`pb-3 px-2 font-medium transition-colors border-b-2 ${adminTab === 'REJECTED' ? 'border-red-600 text-red-800' : 'border-transparent text-gray-600'}`}>Rejected Users</button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {users.filter(u => u.status === adminTab).map(u => (
-                <div key={u.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col animate-fadeIn">
+                <div key={u.id} className="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-white/50 p-6 flex flex-col animate-fadeIn">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-gray-100 rounded-full overflow-hidden">
@@ -806,8 +811,8 @@ const App: React.FC = () => {
                 </div>
               ))}
               {users.filter(u => u.status === adminTab).length === 0 && (
-                <div className="col-span-full text-center py-12 text-gray-400">
-                  <ShieldCheck size={48} className="mx-auto mb-4 opacity-20"/>
+                <div className="col-span-full text-center py-12 text-gray-500">
+                  <ShieldCheck size={48} className="mx-auto mb-4 opacity-40"/>
                   <p>No users found in this list.</p>
                 </div>
               )}
@@ -819,15 +824,15 @@ const App: React.FC = () => {
         {currentView === 'DASHBOARD' && (
           <div className="p-6 max-w-6xl mx-auto w-full animate-fadeIn">
             <div className="flex justify-between items-center mb-8">
-               <h1 className="text-2xl font-bold text-gray-800">Producer Dashboard</h1>
-               <div className="flex bg-gray-200 rounded-lg p-1">
-                 <button onClick={() => setInventoryView('LIST')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${inventoryView === 'LIST' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}>List View</button>
-                 <button onClick={() => setInventoryView('CALENDAR')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${inventoryView === 'CALENDAR' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}>Calendar</button>
+               <h1 className="text-2xl font-bold text-gray-800 drop-shadow-sm">Producer Dashboard</h1>
+               <div className="flex bg-white/50 backdrop-blur rounded-lg p-1">
+                 <button onClick={() => setInventoryView('LIST')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${inventoryView === 'LIST' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}>List View</button>
+                 <button onClick={() => setInventoryView('CALENDAR')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${inventoryView === 'CALENDAR' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}>Calendar</button>
                </div>
             </div>
 
             {/* Stats & Profile */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
+            <div className="bg-white/95 backdrop-blur-sm p-6 rounded-xl shadow-sm border border-white/50 mb-8">
                <div className="flex justify-between items-start">
                   <div className="flex gap-4">
                     <div className="w-16 h-16 bg-gray-200 rounded-full overflow-hidden">
@@ -871,7 +876,7 @@ const App: React.FC = () => {
             </div>
             
             {/* Reviews & Reputation */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
+            <div className="bg-white/95 backdrop-blur-sm p-6 rounded-xl shadow-sm border border-white/50 mb-8">
               <h3 className="text-lg font-bold text-gray-800 mb-4">Reviews & Reputation</h3>
               <div className="space-y-4">
                  {reviews.filter(r => r.producerId === currentUser?.id).length > 0 ? (
@@ -894,7 +899,7 @@ const App: React.FC = () => {
             </div>
 
             {/* Add New Product Form */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
+            <div className="bg-white/95 backdrop-blur-sm p-6 rounded-xl shadow-sm border border-white/50 mb-8">
                <h3 className="text-lg font-bold text-gray-800 mb-4">{editingProductId ? 'Edit Product' : 'Add New Product'}</h3>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                  <div className="space-y-4">
@@ -963,9 +968,9 @@ const App: React.FC = () => {
 
             {/* Inventory View */}
             {inventoryView === 'CALENDAR' ? renderProducerCalendar() : (
-               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+               <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-white/50 overflow-hidden">
                  <table className="w-full">
-                   <thead className="bg-gray-50 border-b border-gray-200">
+                   <thead className="bg-gray-50/50 border-b border-gray-200">
                      <tr>
                        <th className="text-left p-4 text-sm font-semibold text-gray-600">Product</th>
                        <th className="text-left p-4 text-sm font-semibold text-gray-600">Category</th>
@@ -976,16 +981,16 @@ const App: React.FC = () => {
                    </thead>
                    <tbody>
                      {products.filter(p => p.producerId === currentUser?.id).map(p => (
-                       <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50">
+                       <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                          <td className="p-4 flex items-center gap-3">
                            <img src={p.imageUrl} className="w-10 h-10 rounded-lg object-cover" alt={p.name} />
-                           <span className="font-medium">{p.name}</span>
+                           <span className="font-medium text-gray-900">{p.name}</span>
                          </td>
                          <td className="p-4 text-gray-600">{p.category}</td>
                          <td className="p-4 text-sm text-gray-500">
                            {p.availableFrom ? `${p.availableFrom} → ${p.availableUntil}` : 'Always'}
                          </td>
-                         <td className="p-4 font-medium">${p.price}</td>
+                         <td className="p-4 font-medium text-gray-900">${p.price}</td>
                          <td className="p-4">
                            <button onClick={() => { 
                              setEditingProductId(p.id); setNewProdName(p.name); setNewProdCat(p.category); setNewProdDesc(p.description); setNewProdPrice(p.price.toString()); setNewProdAvailableFrom(p.availableFrom || ''); setNewProdAvailableUntil(p.availableUntil || ''); setNewProdImage(p.imageUrl);
@@ -1006,11 +1011,11 @@ const App: React.FC = () => {
         {/* VIEW: WISHLIST */}
         {currentView === 'WISHLIST' && (
           <div className="p-6 max-w-6xl mx-auto w-full animate-fadeIn">
-            <h1 className="text-2xl font-bold text-gray-800 mb-6">My Wishlist</h1>
+            <h1 className="text-2xl font-bold text-gray-800 mb-6 drop-shadow-sm">My Wishlist</h1>
             {products.filter(p => wishlist.includes(p.id)).length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {products.filter(p => wishlist.includes(p.id)).map(p => (
-                   <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow group relative">
+                   <div key={p.id} className="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-white/50 overflow-hidden hover:shadow-md transition-shadow group relative">
                     <div className="relative h-48">
                       <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
                       <button 
@@ -1032,8 +1037,8 @@ const App: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-20 text-gray-400">
-                <Heart size={48} className="mx-auto mb-4 opacity-20" />
+              <div className="text-center py-20 text-gray-500">
+                <Heart size={48} className="mx-auto mb-4 opacity-40" />
                 <p>Your wishlist is empty. Start exploring!</p>
               </div>
             )}
@@ -1045,8 +1050,8 @@ const App: React.FC = () => {
           <div className="p-6 max-w-7xl mx-auto w-full animate-fadeIn">
             <div className="flex flex-col md:flex-row gap-4 mb-8 justify-between items-start md:items-center">
                <div>
-                  <h1 className="text-2xl font-bold text-gray-800">Marketplace</h1>
-                  <p className="text-gray-500 text-sm">Fresh from your local community</p>
+                  <h1 className="text-2xl font-bold text-gray-800 drop-shadow-sm">Marketplace</h1>
+                  <p className="text-gray-600 text-sm font-medium">Fresh from your local community</p>
                </div>
                
                <div className="flex flex-col gap-3 w-full md:w-auto">
@@ -1059,7 +1064,7 @@ const App: React.FC = () => {
                      value={searchTerm}
                      onChange={e => setSearchTerm(e.target.value)}
                      onKeyDown={e => e.key === 'Enter' && handleSmartSearch()}
-                     className="w-full pl-10 pr-12 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-leaf-500 shadow-sm" 
+                     className="w-full pl-10 pr-12 py-3 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-leaf-500 shadow-sm" 
                    />
                    <button 
                       onClick={handleSmartSearch}
@@ -1072,13 +1077,13 @@ const App: React.FC = () => {
                  {/* Smart Search Chips */}
                  {smartKeywords.length > 0 && (
                    <div className="flex gap-2 flex-wrap">
-                      <span className="text-xs text-gray-500 py-1">AI suggestions:</span>
+                      <span className="text-xs text-gray-600 py-1 font-medium">AI suggestions:</span>
                       {smartKeywords.map(kw => (
-                        <button key={kw} onClick={() => { setSearchTerm(kw); handleSmartSearch(); }} className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full border border-purple-100 hover:bg-purple-100">
+                        <button key={kw} onClick={() => { setSearchTerm(kw); handleSmartSearch(); }} className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full border border-purple-100 hover:bg-purple-100 shadow-sm">
                           {kw}
                         </button>
                       ))}
-                      <button onClick={() => setSmartKeywords([])} className="text-xs text-gray-400 hover:text-gray-600"><XIcon size={12}/></button>
+                      <button onClick={() => setSmartKeywords([])} className="text-xs text-gray-500 hover:text-gray-700"><XIcon size={12}/></button>
                    </div>
                  )}
                </div>
@@ -1093,7 +1098,7 @@ const App: React.FC = () => {
                      <button 
                        key={cat}
                        onClick={() => setSelectedCategory(cat)}
-                       className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedCategory === cat ? 'bg-leaf-600 text-white shadow-md shadow-leaf-200' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+                       className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors shadow-sm ${selectedCategory === cat ? 'bg-leaf-600 text-white shadow-md shadow-leaf-200' : 'bg-white/90 text-gray-700 border border-gray-200 hover:bg-white'}`}
                      >
                        {cat}
                      </button>
@@ -1102,7 +1107,7 @@ const App: React.FC = () => {
                </div>
 
                {/* Date Filter */}
-               <div className={`flex items-center gap-3 p-3 bg-white border rounded-xl shadow-sm transition-colors ${showAvailableOnly ? 'border-leaf-300 ring-1 ring-leaf-100' : 'border-gray-200'}`}>
+               <div className={`flex items-center gap-3 p-3 bg-white/95 backdrop-blur-sm border rounded-xl shadow-sm transition-colors ${showAvailableOnly ? 'border-leaf-300 ring-1 ring-leaf-100' : 'border-gray-200'}`}>
                  <label className="flex items-center gap-2 cursor-pointer select-none">
                     <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${showAvailableOnly ? 'bg-leaf-600 border-leaf-600' : 'border-gray-300 bg-gray-50'}`}>
                       {showAvailableOnly && <Check size={14} className="text-white"/>}
@@ -1118,12 +1123,24 @@ const App: React.FC = () => {
                    <div className="flex items-center gap-2 pl-3 border-l border-gray-200 animate-fadeIn">
                       <div className="flex flex-col">
                         <label className="text-[10px] text-gray-500 leading-none mb-0.5">From</label>
-                        <input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-gray-50 focus:outline-none focus:border-leaf-500" />
+                        <input 
+                          type="date" 
+                          value={filterStartDate} 
+                          min={new Date().toISOString().split('T')[0]}
+                          onChange={e => setFilterStartDate(e.target.value)} 
+                          className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-gray-50 focus:outline-none focus:border-leaf-500" 
+                        />
                       </div>
                       <ArrowRight size={12} className="text-gray-400 mt-3" />
                       <div className="flex flex-col">
                         <label className="text-[10px] text-gray-500 leading-none mb-0.5">Until</label>
-                        <input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-gray-50 focus:outline-none focus:border-leaf-500" />
+                        <input 
+                          type="date" 
+                          value={filterEndDate} 
+                          min={filterStartDate || new Date().toISOString().split('T')[0]}
+                          onChange={e => setFilterEndDate(e.target.value)} 
+                          className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-gray-50 focus:outline-none focus:border-leaf-500" 
+                        />
                       </div>
                    </div>
                  )}
@@ -1132,7 +1149,7 @@ const App: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                {/* AI Chef Card */}
-               <div className="col-span-full bg-gradient-to-r from-orange-50 to-orange-100 rounded-xl p-6 flex items-center justify-between border border-orange-200">
+               <div className="col-span-full bg-gradient-to-r from-orange-50/95 to-orange-100/95 backdrop-blur-sm rounded-xl p-6 flex items-center justify-between border border-orange-200 shadow-sm">
                   <div>
                     <h3 className="font-bold text-orange-900 text-lg flex items-center gap-2">
                        <ChefHat size={24} /> AI Chef Suggestion
@@ -1208,8 +1225,8 @@ const App: React.FC = () => {
             </div>
             {filteredProducts.length === 0 && (
                <div className="text-center py-20">
-                 <p className="text-gray-400 text-lg">No products found matching your search.</p>
-                 <button onClick={() => { setSearchTerm(''); setSmartKeywords([]); setSelectedCategory('All'); setShowAvailableOnly(false); }} className="mt-4 text-leaf-600 font-medium hover:underline">Clear Filters</button>
+                 <p className="text-gray-600 text-lg font-medium drop-shadow-sm">No products found matching your search.</p>
+                 <button onClick={() => { setSearchTerm(''); setSmartKeywords([]); setSelectedCategory('All'); setShowAvailableOnly(false); }} className="mt-4 text-leaf-800 font-bold hover:underline bg-white/50 px-3 py-1 rounded-full">Clear Filters</button>
                </div>
             )}
           </div>
