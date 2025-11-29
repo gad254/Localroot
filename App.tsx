@@ -1,362 +1,167 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
-  User, UserRole, UserStatus, Product, Message, ViewState, RecipeSuggestion, Review
+  User, Product, ViewState, UserRole, UserStatus, Message, 
+  RecipeSuggestion, Review
 } from './types';
-import { generateProductDescription, suggestRecipe, smartSearch } from './services/geminiService';
 import ChatInterface from './components/ChatInterface';
+import { generateProductDescription, suggestRecipe, smartSearch } from './services/geminiService';
 import { 
-  ShoppingBasket, MapPin, User as UserIcon, MessageSquare, 
-  Menu, X, Plus, Search, Sparkles, ChefHat, Heart, Star, LogOut,
-  ThumbsUp, ArrowLeft, Edit2, Check, X as XIcon, Calendar, Filter, Tag, Mail, Upload, Image as ImageIcon,
-  ChevronLeft, ChevronRight, List, Sprout, ShieldCheck, Lock, Eye, EyeOff, UserCheck, UserX, RotateCcw,
-  AlertCircle, Timer, BadgeCheck, Send, ArrowRight, Map, BarChart3, TrendingUp, DollarSign, Package
+  ShoppingBasket, MessageCircle, Search, 
+  Sparkles, Heart, X, Leaf, Calendar as CalendarIcon, 
+  LayoutGrid, ChevronLeft, ChevronRight, Edit, Plus, Store, ChefHat, 
+  Image as ImageIcon, Upload, Star, Check, XCircle, UserCheck, Shield, LogOut,
+  BadgeCheck
 } from 'lucide-react';
 
-// --- MOCK DATA INITIALIZATION ---
+// --- Mock Data ---
 const MOCK_USERS: User[] = [
-  { id: 'u1', name: 'Alice Consumer', email: 'gadbolima@gmail.com', role: UserRole.CONSUMER, location: 'San Francisco, CA', avatarUrl: 'https://picsum.photos/100/100?random=1', status: UserStatus.APPROVED, isVerified: true, password: 'Gadbolima995' },
-  { id: 'u2', name: 'Green Valley Farm', email: 'gadbolima6@gmail.com', role: UserRole.PRODUCER, location: 'Petaluma, CA', bio: 'Certified organic vegetables since 1998.', avatarUrl: 'https://picsum.photos/100/100?random=2', status: UserStatus.APPROVED, isVerified: true, password: 'Gadbolima995.' },
-  { id: 'u3', name: 'Bob\'s Honey', email: 'bob@test.com', role: UserRole.PRODUCER, location: 'Napa, CA', bio: 'Raw, unfiltered honey from local wildflowers.', avatarUrl: 'https://picsum.photos/100/100?random=3', status: UserStatus.APPROVED, isVerified: true, password: 'password' },
-  { id: 'u4', name: 'Admin User', email: 'admin@demo.com', role: UserRole.ADMIN, location: 'Cloud', avatarUrl: 'https://picsum.photos/100/100?random=4', status: UserStatus.APPROVED, isVerified: true, password: 'password' },
+  {
+    id: 'u1', name: 'Green Valley Farm', email: 'contact@greenvalley.com', role: UserRole.PRODUCER,
+    location: 'Portland, OR', status: UserStatus.APPROVED, isVerified: true,
+    bio: 'Family owned organic farm since 1985.',
+    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop'
+  },
+  {
+    id: 'u2', name: 'Alice Smith', email: 'alice@example.com', role: UserRole.CONSUMER,
+    status: UserStatus.APPROVED, isVerified: true,
+    location: 'Portland, OR'
+  },
+  {
+    id: 'u3', name: 'Urban Roots', email: 'info@urbanroots.org', role: UserRole.PRODUCER,
+    location: 'Seattle, WA', status: UserStatus.PENDING, isVerified: false,
+    bio: 'Hydroponic urban farming initiative awaiting approval.'
+  },
+  {
+    id: 'u4', name: 'Admin User', email: 'admin@localroots.com', role: UserRole.ADMIN,
+    status: UserStatus.APPROVED, isVerified: true,
+    location: 'HQ'
+  }
 ];
 
 const MOCK_PRODUCTS: Product[] = [
-  { id: 'p1', producerId: 'u2', name: 'Heirloom Tomatoes', description: 'Juicy, colorful mix of heirloom tomatoes.', price: 4.50, unit: 'lb', category: 'Vegetables', imageUrl: 'https://picsum.photos/400/300?random=10', inStock: true, organic: true, availableFrom: '2024-06-01', availableUntil: '2024-09-30' },
-  { id: 'p2', producerId: 'u2', name: 'Fresh Kale', description: 'Crunchy, dark green kale bunches.', price: 3.00, unit: 'bunch', category: 'Vegetables', imageUrl: 'https://picsum.photos/400/300?random=11', inStock: true, organic: true },
-  { id: 'p3', producerId: 'u3', name: 'Wildflower Honey', description: 'Sweet, floral honey. Perfect for tea.', price: 12.00, unit: 'jar', category: 'Pantry', imageUrl: 'https://picsum.photos/400/300?random=12', inStock: true, organic: true },
-  { id: 'p4', producerId: 'u2', name: 'Farm Eggs', description: 'Free-range eggs with golden yolks.', price: 8.00, unit: 'dozen', category: 'Dairy & Eggs', imageUrl: 'https://picsum.photos/400/300?random=13', inStock: false, organic: false },
+  {
+    id: 'p1', producerId: 'u1', name: 'Heirloom Tomatoes', description: 'Juicy, colorful tomatoes.',
+    price: 4.50, unit: 'lb', category: 'Vegetables', inStock: true,
+    imageUrl: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400&h=300&fit=crop',
+    availableFrom: '2023-06-01', availableUntil: '2023-08-30'
+  },
+  {
+    id: 'p2', producerId: 'u1', name: 'Fresh Basil', description: 'Aromatic sweet basil.',
+    price: 2.00, unit: 'bunch', category: 'Herbs', inStock: true,
+    imageUrl: 'https://images.unsplash.com/photo-1618164436241-4473940d1f5c?w=400&h=300&fit=crop',
+    availableFrom: '2023-05-15', availableUntil: '2023-09-15'
+  },
+  {
+    id: 'p3', producerId: 'u3', name: 'Microgreens Mix', description: 'Nutrient dense greens.',
+    price: 6.00, unit: 'box', category: 'Greens', inStock: true,
+    imageUrl: 'https://images.unsplash.com/photo-1535242208474-9a2793260ca8?w=400&h=300&fit=crop',
+    availableFrom: '2023-01-01', availableUntil: '2023-12-31'
+  }
 ];
 
 const MOCK_MESSAGES: Message[] = [
-  { id: 'm1', senderId: 'u1', receiverId: 'u2', content: 'Do you have tomatoes this week?', timestamp: Date.now() - 100000 },
-  { id: 'm2', senderId: 'u2', receiverId: 'u1', content: 'Yes! Just harvested this morning.', timestamp: Date.now() - 90000 },
+  { id: 'm1', senderId: 'u2', receiverId: 'u1', content: 'Do you have bulk pricing?', timestamp: Date.now() - 100000 },
+  { id: 'm2', senderId: 'u1', receiverId: 'u2', content: 'Yes, for orders over 10lbs.', timestamp: Date.now() - 50000 }
 ];
 
 const MOCK_REVIEWS: Review[] = [
-  { id: 'r1', producerId: 'u2', userId: 'u1', userName: 'Alice Consumer', rating: 5, comment: 'Amazing tomatoes! Tastes like summer.', timestamp: Date.now() - 1000000 },
-  { id: 'r2', producerId: 'u2', userId: 'u4', userName: 'Admin User', rating: 4, comment: 'Great quality, but limited stock sometimes.', timestamp: Date.now() - 2000000 },
-  { id: 'r3', producerId: 'u3', userId: 'u1', userName: 'Alice Consumer', rating: 5, comment: 'Best honey I have ever had.', timestamp: Date.now() - 500000 },
+  { id: 'r1', producerId: 'u1', userId: 'u2', userName: 'Alice Smith', rating: 5, comment: 'Amazing tomatoes! Tastes like summer.', timestamp: Date.now() - 86400000 },
+  { id: 'r2', producerId: 'u1', userId: 'u99', userName: 'John Doe', rating: 4, comment: 'Great quality, but parking was tricky.', timestamp: Date.now() - 172800000 }
 ];
 
-// Helper Component for Verified Badge
+const PRODUCT_UNITS = ['lb', 'oz', 'kg', 'g', 'bunch', 'piece', 'box', 'dozen', 'pint', 'quart'];
+
 const VerifiedBadge = () => (
   <span className="inline-flex items-center ml-1" title="Verified Producer">
-    <BadgeCheck size={18} className="text-white fill-blue-500" />
+     <BadgeCheck className="w-4 h-4 text-white fill-blue-500" />
   </span>
 );
 
 const App: React.FC = () => {
-  // --- STATE ---
-  const [showSplash, setShowSplash] = useState(true);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [view, setView] = useState<ViewState>('MARKETPLACE');
+  const [currentUser, setCurrentUser] = useState<User>(MOCK_USERS[0]);
   const [users, setUsers] = useState<User[]>(MOCK_USERS);
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
+  const [searchQuery, setSearchQuery] = useState('');
   const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
   const [reviews, setReviews] = useState<Review[]>(MOCK_REVIEWS);
-  const [currentView, setCurrentView] = useState<ViewState>('MARKETPLACE');
-  
-  // Auth State
-  const [authMode, setAuthMode] = useState<'LOGIN' | 'SIGNUP' | 'VERIFY'>('LOGIN');
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [signupData, setSignupData] = useState({ name: '', email: '', password: '', role: UserRole.CONSUMER, location: '', bio: '' });
-  const [verificationCode, setVerificationCode] = useState('');
-  const [generatedCode, setGeneratedCode] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [pendingUser, setPendingUser] = useState<Partial<User> | null>(null);
-  const [resendCountdown, setResendCountdown] = useState(0);
-
-  // UI State
-  const [searchTerm, setSearchTerm] = useState('');
-  const [smartKeywords, setSmartKeywords] = useState<string[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedProducer, setSelectedProducer] = useState<User | null>(null);
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  
+  // Recipe State
   const [aiRecipe, setAiRecipe] = useState<RecipeSuggestion | null>(null);
-  const [isGeneratingRecipe, setIsGeneratingRecipe] = useState(false);
-  const [isSearchingSmart, setIsSearchingSmart] = useState(false);
-  const [wishlist, setWishlist] = useState<string[]>([]);
-  const [showAvailableOnly, setShowAvailableOnly] = useState(false);
-  const [filterStartDate, setFilterStartDate] = useState('');
-  const [filterEndDate, setFilterEndDate] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [mapVisibleProductIds, setMapVisibleProductIds] = useState<Set<string>>(new Set());
+  const [isRecipeLoading, setIsRecipeLoading] = useState(false);
+  const [pantryIngredients, setPantryIngredients] = useState('');
 
-  // Producer Form State
+  // Dashboard State
+  const [dashboardView, setDashboardView] = useState<'LIST' | 'CALENDAR'>('CALENDAR');
+  const [calendarDate, setCalendarDate] = useState(new Date(2023, 5, 1)); // Start in June 2023 for demo data
+  
+  // Add Product Form State
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [newProdName, setNewProdName] = useState('');
-  const [newProdCat, setNewProdCat] = useState('Vegetables');
-  const [newProdDesc, setNewProdDesc] = useState('');
+  const [newProdCategory, setNewProdCategory] = useState('Vegetables');
   const [newProdPrice, setNewProdPrice] = useState('');
-  const [newProdAvailableFrom, setNewProdAvailableFrom] = useState('');
-  const [newProdAvailableUntil, setNewProdAvailableUntil] = useState('');
-  const [newProdImage, setNewProdImage] = useState<string | null>(null);
-  const [imageError, setImageError] = useState('');
-  const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
-  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [newProdUnit, setNewProdUnit] = useState('lb');
+  const [newProdDesc, setNewProdDesc] = useState('');
+  const [newProdImage, setNewProdImage] = useState('');
+  const [newProdFrom, setNewProdFrom] = useState('');
+  const [newProdUntil, setNewProdUntil] = useState('');
 
-  // Producer Dashboard View State
-  const [inventoryView, setInventoryView] = useState<'LIST' | 'CALENDAR'>('LIST');
-  const [calendarDate, setCalendarDate] = useState(new Date());
-
-  // Producer Profile Edit State
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editLocation, setEditLocation] = useState('');
-  const [editBio, setEditBio] = useState('');
-
-  // Review Form State
+  // Review State
+  const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
   const [newReviewRating, setNewReviewRating] = useState(5);
   const [newReviewComment, setNewReviewComment] = useState('');
-  const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
 
-  // Admin Dashboard State
-  const [adminTab, setAdminTab] = useState<'PENDING' | 'REJECTED' | 'ANALYTICS'>('PENDING');
-
-  // --- ACTIONS ---
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Resend code countdown timer
-  useEffect(() => {
-    let interval: number;
-    if (resendCountdown > 0 && authMode === 'VERIFY') {
-      interval = window.setInterval(() => {
-        setResendCountdown((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [resendCountdown, authMode]);
-
-  // --- AUTH ACTIONS ---
-  const handleLogin = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAuthError('');
-    
-    const user = users.find(u => u.email.toLowerCase() === loginEmail.toLowerCase());
-    
-    if (!user) {
-      setAuthError('User not found. Please sign up.');
-      return;
-    }
-
-    if (user.password !== loginPassword) {
-      setAuthError('Incorrect password.');
-      return;
-    }
-
-    if (user.status === UserStatus.PENDING) {
-      setAuthError('Your account is currently PENDING approval. Please check back later.');
-      return;
-    }
-
-    if (user.status === UserStatus.REJECTED) {
-      setAuthError('Your account request has been declined.');
-      return;
-    }
-
-    setCurrentUser(user);
-    if (user.role === UserRole.ADMIN) {
-      setCurrentView('ADMIN');
-    } else if (user.role === UserRole.PRODUCER) {
-      setCurrentView('DASHBOARD');
-    } else {
-      setCurrentView('MARKETPLACE');
-    }
+    if (!searchQuery.trim()) return;
+    const keywords = await smartSearch(searchQuery);
+    console.log("AI suggested keywords:", keywords);
   };
 
-  const handleSignupSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    p.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-    if (users.some(u => u.email.toLowerCase() === signupData.email.toLowerCase())) {
-      setAuthError('Email already exists.');
-      return;
-    }
-
-    if (signupData.password.length < 6) {
-      setAuthError('Password must be at least 6 characters.');
-      return;
-    }
-
-    // Generate code
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
-    setGeneratedCode(code);
-    
-    // Mock Send Email
-    alert(`[MOCK EMAIL SERVER]\nTo: ${signupData.email}\nSubject: Verify your LocalRoots account\n\nYour security code is: ${code}`);
-
-    setPendingUser({
-      ...signupData,
-      status: UserStatus.PENDING,
-      isVerified: false
-    });
-    setResendCountdown(30);
-    setAuthMode('VERIFY');
+  const handleGenerateRecipe = async () => {
+    setIsRecipeLoading(true);
+    // Use top product names for "Inspire Me"
+    const ingredients = products.slice(0, 5).map(p => p.name).join(", ");
+    const recipe = await suggestRecipe(ingredients);
+    setAiRecipe(recipe);
+    setIsRecipeLoading(false);
   };
 
-  const handleResendCode = () => {
-    if (resendCountdown > 0) return;
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
-    setGeneratedCode(code);
-    setResendCountdown(30);
-    alert(`[MOCK EMAIL SERVER]\nTo: ${pendingUser?.email}\nSubject: NEW Security Code\n\nYour new code is: ${code}`);
+  const handlePantryRecipe = async () => {
+    if (!pantryIngredients.trim()) return;
+    setIsRecipeLoading(true);
+    const recipe = await suggestRecipe(pantryIngredients);
+    setAiRecipe(recipe);
+    setIsRecipeLoading(false);
   };
 
-  const handleVerifySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
-
-    if (verificationCode === generatedCode) {
-      // Create User
-      const newUser: User = {
-        id: `u${Date.now()}`,
-        name: pendingUser?.name || '',
-        email: pendingUser?.email || '',
-        role: pendingUser?.role || UserRole.CONSUMER,
-        location: pendingUser?.location,
-        bio: pendingUser?.bio,
-        avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(pendingUser?.name || '')}&background=random`,
-        status: UserStatus.PENDING, // STILL PENDING UNTIL ADMIN APPROVES
-        isVerified: true,
-        password: pendingUser?.password
-      };
-
-      setUsers(prev => [...prev, newUser]);
-      setAuthMode('LOGIN');
-      setLoginEmail(newUser.email);
-      setLoginPassword('');
-      setVerificationCode('');
-      setSignupData({ name: '', email: '', password: '', role: UserRole.CONSUMER, location: '', bio: '' });
-      
-      // Success Message
-      alert("Email verified successfully! Your account has been created and is now waiting for Admin approval.");
-    } else {
-      setAuthError('Invalid code. Please try again.');
-    }
+  const handleSendMessage = (receiverId: string, content: string) => {
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      senderId: currentUser.id,
+      receiverId,
+      content,
+      timestamp: Date.now()
+    };
+    setMessages([...messages, newMessage]);
   };
 
-  const handleAdminAction = (userId: string, action: 'APPROVE' | 'REJECT') => {
-    const userToUpdate = users.find(u => u.id === userId);
-    if (!userToUpdate) return;
-
-    setUsers(prev => prev.map(u => {
-      if (u.id === userId) {
-        return {
-          ...u,
-          status: action === 'APPROVE' ? UserStatus.APPROVED : UserStatus.REJECTED
-        };
-      }
-      return u;
-    }));
-
-    // Mock Email Notification
-    const subject = action === 'APPROVE' ? 'Account Approved' : 'Account Update';
-    const body = action === 'APPROVE' 
-      ? `Congratulations! Your LocalRoots account has been approved. You can now log in.`
-      : `We regret to inform you that your LocalRoots account request has been declined.`;
-    
-    alert(`[MOCK EMAIL SERVER]\nTo: ${userToUpdate.email}\nSubject: ${subject}\n\n${body}`);
+  const enhanceDescription = async (productId: string) => {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    const newDesc = await generateProductDescription(product.name, product.category);
+    setProducts(products.map(p => p.id === productId ? { ...p, description: newDesc } : p));
   };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setCurrentView('MARKETPLACE');
-    setAuthMode('LOGIN');
-    setLoginEmail('');
-    setLoginPassword('');
-    setActiveConversationId(null);
-  };
-
-  // --- MARKETPLACE ACTIONS ---
-  const handleSmartSearch = async () => {
-    if (!searchTerm.trim()) return;
-    setIsSearchingSmart(true);
-    setSmartKeywords([]);
-    
-    const keywords = await smartSearch(searchTerm);
-    setSmartKeywords(keywords);
-    setIsSearchingSmart(false);
-  };
-
-  const handleAiRecipe = async () => {
-    setIsGeneratingRecipe(true);
-    const suggestion = await suggestRecipe(filteredProducts.slice(0, 5));
-    setAiRecipe(suggestion);
-    setIsGeneratingRecipe(false);
-  };
-
-  const toggleWishlist = (productId: string) => {
-    setWishlist(prev => 
-      prev.includes(productId) ? prev.filter(id => id !== productId) : [...prev, productId]
-    );
-  };
-
-  const toggleProductMap = (productId: string) => {
-    const newSet = new Set(mapVisibleProductIds);
-    if (newSet.has(productId)) {
-      newSet.delete(productId);
-    } else {
-      newSet.add(productId);
-    }
-    setMapVisibleProductIds(newSet);
-  };
-
-  const getProducerRating = (producerId: string) => {
-    const producerReviews = reviews.filter(r => r.producerId === producerId);
-    if (producerReviews.length === 0) return 0;
-    const sum = producerReviews.reduce((acc, r) => acc + r.rating, 0);
-    return sum / producerReviews.length;
-  };
-
-  const getProducerReviewCount = (producerId: string) => {
-    return reviews.filter(r => r.producerId === producerId).length;
-  };
-
-  const renderStars = (rating: number) => {
-    return (
-      <div className="flex text-yellow-400">
-        {[...Array(5)].map((_, i) => (
-          <Star key={i} size={14} fill={i < Math.round(rating) ? "currentColor" : "none"} className={i < Math.round(rating) ? "" : "text-gray-300"} />
-        ))}
-      </div>
-    );
-  };
-
-  const handleContactProducer = (producerId: string) => {
-    setActiveConversationId(producerId);
-    setSelectedProducer(null); // Close modal
-    setCurrentView('MESSAGES');
-  };
-
-  // --- PRODUCER ACTIONS ---
-  const handleGenerateDescription = async () => {
-    if (!newProdName.trim()) return;
-    setIsGeneratingDesc(true);
-    const desc = await generateProductDescription(newProdName, newProdCat);
-    setNewProdDesc(desc);
-    setIsGeneratingDesc(false);
-  };
-
+  
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    setImageError('');
     if (file) {
-      if (!file.type.startsWith('image/')) {
-        setImageError('Invalid file type. Please upload an image (JPG, PNG, etc).');
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        setImageError('File size exceeds 5MB limit.');
-        return;
-      }
-
       const reader = new FileReader();
       reader.onloadend = () => {
         setNewProdImage(reader.result as string);
@@ -366,61 +171,32 @@ const App: React.FC = () => {
   };
 
   const handleAddProduct = () => {
-    if (!newProdName || !newProdPrice) return;
-    
-    if (editingProductId) {
-      setProducts(prev => prev.map(p => p.id === editingProductId ? {
-        ...p,
-        name: newProdName,
-        category: newProdCat,
-        description: newProdDesc,
-        price: parseFloat(newProdPrice),
-        availableFrom: newProdAvailableFrom,
-        availableUntil: newProdAvailableUntil,
-        imageUrl: newProdImage || p.imageUrl
-      } : p));
-      setEditingProductId(null);
-    } else {
-      const newProduct: Product = {
-        id: `p${Date.now()}`,
-        producerId: currentUser?.id || '',
-        name: newProdName,
-        category: newProdCat,
-        description: newProdDesc || 'Fresh local product.',
-        price: parseFloat(newProdPrice),
-        unit: 'unit',
-        imageUrl: newProdImage || `https://picsum.photos/400/300?random=${Date.now()}`,
-        inStock: true,
-        availableFrom: newProdAvailableFrom,
-        availableUntil: newProdAvailableUntil,
-        organic: true
-      };
-      setProducts([...products, newProduct]);
-    }
-    // Reset Form
+    const newProduct: Product = {
+      id: Date.now().toString(),
+      producerId: currentUser.id,
+      name: newProdName,
+      category: newProdCategory,
+      price: parseFloat(newProdPrice) || 0,
+      unit: newProdUnit,
+      description: newProdDesc,
+      imageUrl: newProdImage || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400&h=300&fit=crop', // Fallback
+      inStock: true,
+      availableFrom: newProdFrom,
+      availableUntil: newProdUntil
+    };
+    setProducts([...products, newProduct]);
+    setIsAddProductOpen(false);
+    // Reset form
     setNewProdName('');
-    setNewProdDesc('');
     setNewProdPrice('');
-    setNewProdAvailableFrom('');
-    setNewProdAvailableUntil('');
-    setNewProdImage(null);
-    setImageError('');
+    setNewProdDesc('');
+    setNewProdImage('');
   };
 
-  const handleSaveProfile = () => {
-    if (!currentUser) return;
-    const updatedUser = { ...currentUser, name: editName, location: editLocation, bio: editBio };
-    setCurrentUser(updatedUser);
-    setUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
-    setIsEditingProfile(false);
-  };
-
-  // --- REVIEW ACTIONS ---
-  const handleAddReview = () => {
-    if (!selectedProducer || !currentUser) return;
-    
+  const handleSubmitReview = () => {
+    if (!selectedProducer) return;
     const newReview: Review = {
-      id: `r${Date.now()}`,
+      id: Date.now().toString(),
       producerId: selectedProducer.id,
       userId: currentUser.id,
       userName: currentUser.name,
@@ -428,711 +204,447 @@ const App: React.FC = () => {
       comment: newReviewComment,
       timestamp: Date.now()
     };
-    
     setReviews([newReview, ...reviews]);
+    setIsReviewFormOpen(false);
     setNewReviewComment('');
     setNewReviewRating(5);
-    setIsReviewFormOpen(false);
   };
 
-  // --- CALENDAR LOGIC ---
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const days = new Date(year, month + 1, 0).getDate();
-    const firstDay = new Date(year, month, 1).getDay();
-    return { days, firstDay };
+  const handleAdminAction = (userId: string, action: 'APPROVE' | 'REJECT') => {
+    setUsers(users.map(u => 
+      u.id === userId 
+        ? { ...u, status: action === 'APPROVE' ? UserStatus.APPROVED : UserStatus.REJECTED, isVerified: action === 'APPROVE' } 
+        : u
+    ));
   };
 
-  const checkProductAvailableOnDate = (product: Product, checkDate: Date): boolean => {
-    if (!product.availableFrom || !product.availableUntil) return true;
+  // Calendar Logic
+  const myProducts = products.filter(p => p.producerId === currentUser.id);
+  
+  const isProductAvailableOnDate = (product: Product, date: Date) => {
+    if (!product.availableFrom || !product.availableUntil) return false;
     
-    // Construct local YYYY-MM-DD string to compare with product availability dates
-    const format = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const target = format(checkDate);
-    const start = product.availableFrom; // Already YYYY-MM-DD
-    const end = product.availableUntil; // Already YYYY-MM-DD
-    
-    return target >= start && target <= end;
+    // Parse YYYY-MM-DD string to local date object (midnight)
+    const parseDate = (str: string) => {
+        const [y, m, d] = str.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    };
+
+    const start = parseDate(product.availableFrom);
+    const end = parseDate(product.availableUntil);
+    const check = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+    return check >= start && check <= end;
   };
 
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'Vegetables': return 'bg-green-100 text-green-800 border-green-200';
-      case 'Fruits': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'Dairy & Eggs': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'Pantry': return 'bg-amber-100 text-amber-800 border-amber-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  // --- ANALYTICS LOGIC ---
-  const getAnalyticsData = () => {
-    const producers = users.filter(u => u.role === UserRole.PRODUCER);
-    return producers.map((p, idx) => {
-      // Deterministic mock data based on ID length or index
-      const baseSales = (p.name.length * 1000) + (idx * 500);
-      const orders = Math.floor(baseSales / 35);
-      const myProducts = products.filter(prod => prod.producerId === p.id);
-      const topProduct = myProducts.length > 0 ? myProducts[0].name : 'N/A';
-      return {
-        id: p.id,
-        name: p.name,
-        sales: baseSales,
-        orders,
-        topProduct
-      };
-    }).sort((a, b) => b.sales - a.sales);
-  };
-
-  // --- FILTER LOGIC ---
-  const categories = ['All', ...Array.from(new Set(products.map(p => p.category)))];
-
-  const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          p.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          p.description.toLowerCase().includes(searchTerm.toLowerCase());
+  const renderCalendar = () => {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay(); // 0 is Sunday
     
-    const producer = users.find(u => u.id === p.producerId);
-    const matchesProducerBio = producer?.bio?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                               producer?.name.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesSmart = smartKeywords.length > 0 ? smartKeywords.some(kw => 
-      p.category.toLowerCase().includes(kw.toLowerCase()) || p.name.toLowerCase().includes(kw.toLowerCase())
-    ) : true;
-
-    const matchesDate = showAvailableOnly ? (() => {
-      const today = new Date().toISOString().split('T')[0];
-      // Use filterStartDate if set, otherwise default to Today
-      const start = filterStartDate || today;
-      // If user sets an end date, use it. If not, we assume they are checking availability on the Start Date (single day check)
-      const end = filterEndDate || start;
-      
-      return (!p.availableFrom || p.availableFrom <= end) && 
-             (!p.availableUntil || p.availableUntil >= start);
-    })() : true;
-
-    const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
-
-    return (matchesSearch || matchesProducerBio) && matchesSmart && matchesDate && matchesCategory;
-  });
-
-  // --- RENDER FUNCTIONS ---
-  const renderProducerCalendar = () => {
-    const { days, firstDay } = getDaysInMonth(calendarDate);
-    const monthYear = calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-    
-    const myProducts = products.filter(p => p.producerId === currentUser?.id);
-    
-    const gridDays = [];
-    for (let i = 0; i < firstDay; i++) gridDays.push(null);
-    for (let i = 1; i <= days; i++) gridDays.push(i);
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const blanks = Array.from({ length: firstDay }, (_, i) => i);
+    const monthName = calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 animate-fadeIn">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-gray-800">{monthYear}</h2>
-          <div className="flex gap-2">
-            <button onClick={() => setCalendarDate(new Date(calendarDate.setMonth(calendarDate.getMonth() - 1)))} className="p-2 hover:bg-gray-100 rounded-full"><ChevronLeft size={20}/></button>
-            <button onClick={() => setCalendarDate(new Date(calendarDate.setMonth(calendarDate.getMonth() + 1)))} className="p-2 hover:bg-gray-100 rounded-full"><ChevronRight size={20}/></button>
-          </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+             <CalendarIcon className="w-5 h-5 text-green-600"/> {monthName}
+           </h2>
+           <div className="flex bg-white rounded-lg shadow-sm border border-gray-200">
+             <button onClick={() => setCalendarDate(new Date(year, month - 1))} className="p-2 hover:bg-gray-50 border-r border-gray-200">
+               <ChevronLeft className="w-5 h-5 text-gray-600"/>
+             </button>
+             <button onClick={() => setCalendarDate(new Date(year, month + 1))} className="p-2 hover:bg-gray-50">
+               <ChevronRight className="w-5 h-5 text-gray-600"/>
+             </button>
+           </div>
         </div>
-        <div className="grid grid-cols-7 gap-2 mb-2 text-center text-sm font-medium text-gray-500">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
-        </div>
-        <div className="grid grid-cols-7 gap-2">
-          {gridDays.map((day, idx) => (
-            <div key={idx} className={`min-h-[100px] border rounded-lg p-1 ${day ? 'bg-white' : 'bg-gray-50 border-transparent'}`}>
-              {day && (
-                <>
-                  <div className="text-right text-xs text-gray-400 mb-1">{day}</div>
-                  <div className="flex flex-col gap-1">
-                    {myProducts.filter(p => checkProductAvailableOnDate(p, new Date(calendarDate.getFullYear(), calendarDate.getMonth(), day))).slice(0, 3).map(p => (
-                      <button 
-                        key={p.id} 
-                        onClick={() => {
-                           setEditingProductId(p.id); 
-                           setNewProdName(p.name); 
-                           setNewProdCat(p.category); 
-                           setNewProdDesc(p.description); 
-                           setNewProdPrice(p.price.toString()); 
-                           setNewProdAvailableFrom(p.availableFrom || ''); 
-                           setNewProdAvailableUntil(p.availableUntil || ''); 
-                           setNewProdImage(p.imageUrl);
-                        }}
-                        className={`text-[10px] px-1 py-0.5 rounded truncate border w-full text-left ${getCategoryColor(p.category)} hover:opacity-80 transition-opacity`}
-                        title={`Click to edit ${p.name}`}
-                      >
-                        {p.name}
-                      </button>
-                    ))}
-                    {myProducts.filter(p => checkProductAvailableOnDate(p, new Date(calendarDate.getFullYear(), calendarDate.getMonth(), day))).length > 3 && (
-                      <div className="text-[10px] text-gray-400 text-center">+ more</div>
-                    )}
-                  </div>
-                </>
-              )}
+        
+        <div className="grid grid-cols-7 border-b border-gray-200">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+            <div key={d} className="py-3 text-center text-xs font-bold text-gray-400 uppercase tracking-wider bg-white">
+              {d}
             </div>
           ))}
         </div>
-      </div>
-    );
-  };
 
-  const renderAdminAnalytics = () => {
-    const analytics = getAnalyticsData();
-    const maxSales = Math.max(...analytics.map(a => a.sales), 1);
-    const totalRevenue = analytics.reduce((acc, curr) => acc + curr.sales, 0);
-    const totalOrders = analytics.reduce((acc, curr) => acc + curr.orders, 0);
-
-    return (
-      <div className="animate-fadeIn space-y-6">
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white/95 backdrop-blur-sm p-6 rounded-xl shadow-sm border border-white/50 flex items-center gap-4">
-             <div className="p-3 bg-green-100 text-green-600 rounded-full"><DollarSign size={24}/></div>
-             <div>
-               <p className="text-sm text-gray-500 font-medium">Total Platform Sales</p>
-               <h3 className="text-2xl font-bold text-gray-900">${totalRevenue.toLocaleString()}</h3>
-             </div>
-          </div>
-          <div className="bg-white/95 backdrop-blur-sm p-6 rounded-xl shadow-sm border border-white/50 flex items-center gap-4">
-             <div className="p-3 bg-blue-100 text-blue-600 rounded-full"><Package size={24}/></div>
-             <div>
-               <p className="text-sm text-gray-500 font-medium">Total Orders</p>
-               <h3 className="text-2xl font-bold text-gray-900">{totalOrders}</h3>
-             </div>
-          </div>
-          <div className="bg-white/95 backdrop-blur-sm p-6 rounded-xl shadow-sm border border-white/50 flex items-center gap-4">
-             <div className="p-3 bg-purple-100 text-purple-600 rounded-full"><TrendingUp size={24}/></div>
-             <div>
-               <p className="text-sm text-gray-500 font-medium">Active Producers</p>
-               <h3 className="text-2xl font-bold text-gray-900">{analytics.length}</h3>
-             </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Sales Chart */}
-          <div className="bg-white/95 backdrop-blur-sm p-6 rounded-xl shadow-sm border border-white/50">
-            <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <BarChart3 size={20} className="text-gray-500"/> Revenue by Producer
-            </h3>
-            <div className="h-64 flex items-end justify-around gap-2">
-              {analytics.map((item) => (
-                <div key={item.id} className="w-full flex flex-col items-center group">
-                  <div className="relative w-full max-w-[60px] bg-gray-100 rounded-t-lg overflow-hidden flex items-end h-full">
-                     <div 
-                       className="w-full bg-leaf-500 group-hover:bg-leaf-600 transition-all duration-500 rounded-t-lg relative"
-                       style={{ height: `${(item.sales / maxSales) * 100}%` }}
-                     >
-                       <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                         ${item.sales.toLocaleString()}
-                       </div>
-                     </div>
-                  </div>
-                  <span className="text-[10px] text-gray-500 mt-2 text-center truncate w-full px-1" title={item.name}>
-                    {item.name.split(' ')[0]}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Top Products Table */}
-          <div className="bg-white/95 backdrop-blur-sm p-6 rounded-xl shadow-sm border border-white/50">
-             <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-               <Star size={20} className="text-gray-500"/> Top Performing Products
-             </h3>
-             <div className="overflow-auto">
-               <table className="w-full">
-                 <thead className="bg-gray-50/50 border-b border-gray-200">
-                   <tr>
-                     <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase">Producer</th>
-                     <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase">Top Product</th>
-                     <th className="text-right p-3 text-xs font-semibold text-gray-500 uppercase">Est. Vol</th>
-                   </tr>
-                 </thead>
-                 <tbody>
-                   {analytics.map(item => (
-                     <tr key={item.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                       <td className="p-3 text-sm font-medium text-gray-900">{item.name}</td>
-                       <td className="p-3 text-sm text-gray-600">{item.topItem}</td>
-                       <td className="p-3 text-sm text-right text-leaf-600 font-mono">${(item.sales * 0.4).toFixed(0)}</td>
-                     </tr>
-                   ))}
-                 </tbody>
-               </table>
-             </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // --- SPLASH SCREEN ---
-  if (showSplash) {
-    return (
-      <div className="fixed inset-0 bg-gradient-to-br from-leaf-600 to-leaf-900 flex flex-col items-center justify-center z-50">
-        <div className="animate-[bounce_2s_infinite]">
-          <Sprout size={80} className="text-white mb-4" />
-        </div>
-        <h1 className="text-4xl font-bold text-white tracking-widest animate-[pulse_3s_infinite]">
-          LocalRoots
-        </h1>
-        <p className="text-leaf-100 mt-2 text-sm tracking-wide">From Farm to Your Table</p>
-      </div>
-    );
-  }
-
-  // --- LOGIN SCREEN ---
-  if (!currentUser) {
-    return (
-      <div className="min-h-screen relative flex items-center justify-center p-4">
-        {/* Background Image */}
-        <div className="absolute inset-0 z-0">
-           <img src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=2832&auto=format&fit=crop" className="w-full h-full object-cover" alt="Farm Background" />
-           <div className="absolute inset-0 bg-amber-50/80 backdrop-blur-[2px]"></div>
-        </div>
-
-        <div className="relative z-10 bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl w-full max-w-md p-8 animate-fadeIn border border-white/50">
-          <div className="flex justify-center mb-6">
-            <div className="bg-leaf-100 p-3 rounded-full">
-              <Sprout size={32} className="text-leaf-600" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold text-center text-gray-800 mb-1">
-            {authMode === 'LOGIN' ? 'Welcome Back' : authMode === 'SIGNUP' ? 'Join LocalRoots' : 'Verify Email'}
-          </h1>
-          <p className="text-center text-gray-500 mb-8 text-sm">Connect with your local food community</p>
-
-          {authError && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-6 text-sm flex items-center gap-2">
-              <AlertCircle size={16} />
-              {authError}
-            </div>
-          )}
-
-          {authMode === 'LOGIN' ? (
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                  <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full pl-10 p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-leaf-500 focus:outline-none" placeholder="you@example.com" required />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                  <input type={showPassword ? "text" : "password"} value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full pl-10 p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-leaf-500 focus:outline-none" placeholder="••••••••" required />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
-                  </button>
-                </div>
-              </div>
-              <button type="submit" className="w-full bg-leaf-600 text-white py-3 rounded-xl font-medium hover:bg-leaf-700 transition-colors shadow-lg shadow-leaf-200">Sign In</button>
-              <p className="text-center text-sm text-gray-600 mt-4">
-                Don't have an account? <button type="button" onClick={() => setAuthMode('SIGNUP')} className="text-leaf-600 font-semibold hover:underline">Sign up</button>
-              </p>
-            </form>
-          ) : authMode === 'SIGNUP' ? (
-            <form onSubmit={handleSignupSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                   <select className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-leaf-500" value={signupData.role} onChange={(e) => setSignupData({...signupData, role: e.target.value as UserRole})}>
-                     <option value={UserRole.CONSUMER}>Consumer</option>
-                     <option value={UserRole.PRODUCER}>Producer</option>
-                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                  <input type="text" value={signupData.name} onChange={e => setSignupData({...signupData, name: e.target.value})} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-leaf-500" placeholder="Your Name" required />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input type="email" value={signupData.email} onChange={e => setSignupData({...signupData, email: e.target.value})} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-leaf-500" placeholder="you@example.com" required />
-              </div>
-               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input type="password" value={signupData.password} onChange={e => setSignupData({...signupData, password: e.target.value})} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-leaf-500" placeholder="Min. 6 chars" required />
-              </div>
-              {signupData.role === UserRole.PRODUCER && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                    <input type="text" value={signupData.location} onChange={e => setSignupData({...signupData, location: e.target.value})} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-leaf-500" placeholder="City, State" required />
-                  </div>
-                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Bio (for approval)</label>
-                    <textarea value={signupData.bio} onChange={e => setSignupData({...signupData, bio: e.target.value})} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-leaf-500" placeholder="Tell us about your farm..." rows={2} required />
-                  </div>
-                </>
-              )}
-              <button type="submit" className="w-full bg-leaf-600 text-white py-3 rounded-xl font-medium hover:bg-leaf-700 transition-colors shadow-lg shadow-leaf-200">Create Account</button>
-              <p className="text-center text-sm text-gray-600 mt-4">
-                Already have an account? <button type="button" onClick={() => setAuthMode('LOGIN')} className="text-leaf-600 font-semibold hover:underline">Log in</button>
-              </p>
-            </form>
-          ) : (
-            <form onSubmit={handleVerifySubmit} className="space-y-6">
-              <div className="text-center">
-                 <p className="text-sm text-gray-600 mb-4">We sent a 4-digit code to <span className="font-semibold">{pendingUser?.email}</span></p>
+        <div className="grid grid-cols-7 auto-rows-[120px] bg-gray-100 gap-px border-b border-gray-200">
+           {blanks.map((b) => <div key={`blank-${b}`} className="bg-white/50" />)}
+           
+           {days.map((day) => {
+             const currentDate = new Date(year, month, day);
+             const availableProducts = myProducts.filter(p => isProductAvailableOnDate(p, currentDate));
+             
+             return (
+               <div key={day} className="bg-white p-2 relative hover:bg-gray-50 transition-colors group">
+                 <span className={`text-sm font-medium ${availableProducts.length > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+                   {day}
+                 </span>
                  
-                 <input type="text" maxLength={4} value={verificationCode} onChange={e => setVerificationCode(e.target.value.replace(/\D/g,''))} className="w-32 text-center text-3xl tracking-[0.5em] p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-leaf-500 font-mono mx-auto block" placeholder="0000" />
-              </div>
-              <div className="flex flex-col gap-3">
-                <button type="submit" className="w-full bg-leaf-600 text-white py-3 rounded-xl font-medium hover:bg-leaf-700 transition-colors">Verify Email</button>
-                <button type="button" onClick={handleResendCode} disabled={resendCountdown > 0} className={`w-full py-3 rounded-xl font-medium border border-gray-200 transition-colors flex items-center justify-center gap-2 ${resendCountdown > 0 ? 'text-gray-400 cursor-not-allowed bg-gray-50' : 'text-gray-700 hover:bg-gray-50'}`}>
-                   {resendCountdown > 0 ? (
-                     <><Timer size={18} /> Resend in {resendCountdown}s</>
-                   ) : (
-                     <><RotateCcw size={18} /> Resend Code</>
-                   )}
-                </button>
-              </div>
-              <button type="button" onClick={() => setAuthMode('SIGNUP')} className="block w-full text-center text-sm text-gray-500 hover:text-gray-700">Cancel</button>
-            </form>
-          )}
+                 <div className="mt-1 flex flex-col gap-1 overflow-y-auto max-h-[85px] scrollbar-hide">
+                    {availableProducts.map(p => (
+                      <div 
+                        key={p.id} 
+                        className="text-[10px] bg-green-100 text-green-800 px-1.5 py-0.5 rounded border border-green-200 truncate cursor-pointer hover:bg-green-200 transition-colors"
+                        title={`${p.name} (${p.category})`}
+                      >
+                        {p.name}
+                      </div>
+                    ))}
+                 </div>
+               </div>
+             );
+           })}
         </div>
       </div>
     );
-  }
+  };
 
-  // --- MAIN APP ---
+  const producerReviews = selectedProducer ? reviews.filter(r => r.producerId === selectedProducer.id) : [];
+  const averageRating = producerReviews.length > 0 
+    ? (producerReviews.reduce((acc, r) => acc + r.rating, 0) / producerReviews.length).toFixed(1)
+    : 'New';
+
+  const pendingUsers = users.filter(u => u.status === UserStatus.PENDING);
+
   return (
-    <div className="flex h-screen relative overflow-hidden">
-      {/* BACKGROUND IMAGE FOR MAIN APP */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        <img src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=2832&auto=format&fit=crop" className="w-full h-full object-cover" alt="Farm Background" />
-        <div className="absolute inset-0 bg-amber-50/80 backdrop-blur-[2px]"></div>
-      </div>
-
-      {/* SIDEBAR */}
-      <div className={`${isSidebarOpen ? 'w-64' : 'w-20'} relative z-20 bg-white/95 backdrop-blur-sm border-r border-gray-200 transition-all duration-300 flex flex-col shadow-xl`}>
-        <div className="p-4 flex items-center justify-between h-16 border-b border-gray-200">
-          <div className={`flex items-center gap-2 ${!isSidebarOpen && 'justify-center w-full'}`}>
-             <Sprout className="text-leaf-600" size={28} />
-             {isSidebarOpen && <span className="font-bold text-lg text-gray-800">LocalRoots</span>}
-          </div>
-          {isSidebarOpen && (
-            <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded-lg lg:hidden">
-              <ChevronLeft size={20} />
-            </button>
-          )}
-        </div>
-
-        <nav className="flex-1 p-3 space-y-2">
-          {currentUser.role !== 'ADMIN' && (
-            <button 
-              onClick={() => setCurrentView('MARKETPLACE')}
-              className={`w-full p-3 rounded-xl flex items-center gap-3 transition-colors ${currentView === 'MARKETPLACE' ? 'bg-leaf-50 text-leaf-700' : 'text-gray-600 hover:bg-gray-100'} ${!isSidebarOpen && 'justify-center'}`}
-            >
-              <ShoppingBasket size={22} />
-              {isSidebarOpen && <span>Marketplace</span>}
-            </button>
-          )}
-          
-          {currentUser.role === 'CONSUMER' && (
-            <button 
-              onClick={() => setCurrentView('WISHLIST')}
-              className={`w-full p-3 rounded-xl flex items-center gap-3 transition-colors ${currentView === 'WISHLIST' ? 'bg-leaf-50 text-leaf-700' : 'text-gray-600 hover:bg-gray-100'} ${!isSidebarOpen && 'justify-center'}`}
-            >
-              <Heart size={22} />
-              {isSidebarOpen && <span>Wishlist</span>}
-            </button>
-          )}
-
-          {currentUser.role === 'PRODUCER' && (
-            <button 
-              onClick={() => setCurrentView('DASHBOARD')}
-              className={`w-full p-3 rounded-xl flex items-center gap-3 transition-colors ${currentView === 'DASHBOARD' ? 'bg-leaf-50 text-leaf-700' : 'text-gray-600 hover:bg-gray-100'} ${!isSidebarOpen && 'justify-center'}`}
-            >
-              <List size={22} />
-              {isSidebarOpen && <span>My Products</span>}
-            </button>
-          )}
-
-          {currentUser.role === 'ADMIN' && (
-             <button 
-              onClick={() => setCurrentView('ADMIN')}
-              className={`w-full p-3 rounded-xl flex items-center gap-3 transition-colors ${currentView === 'ADMIN' ? 'bg-leaf-50 text-leaf-700' : 'text-gray-600 hover:bg-gray-100'} ${!isSidebarOpen && 'justify-center'}`}
-            >
-              <ShieldCheck size={22} />
-              {isSidebarOpen && <span>Admin Panel</span>}
-            </button>
-          )}
-
-          <button 
-            onClick={() => setCurrentView('MESSAGES')}
-            className={`w-full p-3 rounded-xl flex items-center gap-3 transition-colors ${currentView === 'MESSAGES' ? 'bg-leaf-50 text-leaf-700' : 'text-gray-600 hover:bg-gray-100'} ${!isSidebarOpen && 'justify-center'}`}
-          >
-            <MessageSquare size={22} />
-            {isSidebarOpen && <span>Messages</span>}
-          </button>
-        </nav>
-
-        <div className="p-3 border-t border-gray-200">
-          <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="hidden lg:flex w-full p-2 justify-center hover:bg-gray-100 rounded-lg text-gray-500 mb-2">
-            {isSidebarOpen ? <ChevronLeft size={20}/> : <ChevronRight size={20}/>}
-          </button>
-          <button 
-            onClick={handleLogout}
-            className={`w-full p-3 rounded-xl flex items-center gap-3 text-red-600 hover:bg-red-50 transition-colors ${!isSidebarOpen && 'justify-center'}`}
-          >
-            <LogOut size={22} />
-            {isSidebarOpen && <span>Sign Out</span>}
-          </button>
-        </div>
-      </div>
-
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 overflow-auto flex flex-col relative z-10">
-        {/* VIEW: ADMIN DASHBOARD */}
-        {currentView === 'ADMIN' && (
-          <div className="p-6 max-w-6xl mx-auto w-full animate-fadeIn">
-            <h1 className="text-2xl font-bold text-gray-800 mb-6 drop-shadow-sm">Admin Dashboard</h1>
-            
-            <div className="flex gap-4 mb-6 border-b border-gray-300/50 pb-1">
-              <button onClick={() => setAdminTab('PENDING')} className={`pb-3 px-2 font-medium transition-colors border-b-2 ${adminTab === 'PENDING' ? 'border-leaf-600 text-leaf-800' : 'border-transparent text-gray-600'}`}>Pending Approvals</button>
-              <button onClick={() => setAdminTab('REJECTED')} className={`pb-3 px-2 font-medium transition-colors border-b-2 ${adminTab === 'REJECTED' ? 'border-red-600 text-red-800' : 'border-transparent text-gray-600'}`}>Rejected Users</button>
-              <button onClick={() => setAdminTab('ANALYTICS')} className={`pb-3 px-2 font-medium transition-colors border-b-2 ${adminTab === 'ANALYTICS' ? 'border-purple-600 text-purple-800' : 'border-transparent text-gray-600'}`}>Analytics</button>
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 relative">
+      {/* Header */}
+      <header className="bg-white shadow-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('MARKETPLACE')}>
+               <div className="bg-green-600 p-2 rounded-lg">
+                  <Leaf className="text-white w-6 h-6" />
+               </div>
+               <span className="text-xl font-bold text-green-900">FarmConnect</span>
             </div>
 
-            {adminTab === 'ANALYTICS' ? renderAdminAnalytics() : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {users.filter(u => u.status === adminTab).map(u => (
-                  <div key={u.id} className="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-white/50 p-6 flex flex-col animate-fadeIn">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-gray-100 rounded-full overflow-hidden">
-                          {u.avatarUrl ? <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover"/> : <UserIcon className="text-gray-400 m-3" size={24} />}
+            <nav className="hidden md:flex gap-4">
+               {currentUser.role === UserRole.PRODUCER && (
+                 <button 
+                    onClick={() => setView('DASHBOARD')}
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'DASHBOARD' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:text-green-600'}`}
+                 >
+                    Producer Dashboard
+                 </button>
+               )}
+               {currentUser.role === UserRole.ADMIN && (
+                 <button 
+                    onClick={() => setView('ADMIN')}
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'ADMIN' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:text-green-600'}`}
+                 >
+                    Admin Panel
+                 </button>
+               )}
+               <button 
+                  onClick={() => setView('MARKETPLACE')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'MARKETPLACE' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:text-green-600'}`}
+               >
+                  Marketplace
+               </button>
+            </nav>
+          </div>
+
+          <div className="hidden md:flex flex-1 max-w-lg mx-8">
+            <div className="relative w-full">
+              <input 
+                type="text" 
+                placeholder="Search fresh produce..." 
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch(e)}
+              />
+              <Search className="absolute left-3 top-2.5 text-gray-400 w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Demo User Switcher */}
+            <select 
+              className="text-xs border border-gray-200 rounded p-1"
+              value={currentUser.id}
+              onChange={(e) => {
+                const user = users.find(u => u.id === e.target.value);
+                if (user) {
+                  setCurrentUser(user);
+                  setView(user.role === UserRole.ADMIN ? 'ADMIN' : (user.role === UserRole.PRODUCER ? 'DASHBOARD' : 'MARKETPLACE'));
+                }
+              }}
+            >
+              {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+            </select>
+
+            <button onClick={() => setView('MESSAGES')} className="relative p-2 text-gray-600 hover:text-green-600 transition-colors">
+              <MessageCircle className="w-6 h-6" />
+              {messages.some(m => m.receiverId === currentUser.id) && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>}
+            </button>
+            <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded-full pr-3 transition-colors">
+               <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold overflow-hidden">
+                 {currentUser.avatarUrl ? <img src={currentUser.avatarUrl} alt="" className="w-full h-full object-cover"/> : currentUser.name[0]}
+               </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {view === 'ADMIN' && currentUser.role === UserRole.ADMIN && (
+          <div className="animate-fadeIn">
+            <h1 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <Shield className="w-8 h-8 text-blue-600" /> Admin Dashboard
+            </h1>
+            
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-6 border-b border-gray-100">
+                <h2 className="text-lg font-bold text-gray-800">Pending Approvals</h2>
+                <p className="text-sm text-gray-500">Review producer verification requests.</p>
+              </div>
+              
+              {pendingUsers.length === 0 ? (
+                <div className="p-12 text-center text-gray-500">
+                  <UserCheck className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>No pending approvals at this time.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {pendingUsers.map(user => (
+                    <div key={user.id} className="p-6 flex items-center justify-between hover:bg-gray-50">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-bold">
+                          {user.name[0]}
                         </div>
                         <div>
-                          <h3 className="font-semibold text-gray-900 flex items-center gap-1">
-                            {u.name} 
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${u.role === UserRole.PRODUCER ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>{u.role}</span>
-                          </h3>
-                          <p className="text-sm text-gray-500">{u.email}</p>
-                          {u.location && <p className="text-xs text-gray-400 flex items-center gap-1 mt-1"><MapPin size={10}/> {u.location}</p>}
+                          <h3 className="font-bold text-gray-900">{user.name}</h3>
+                          <p className="text-sm text-gray-500">{user.email} • {user.location}</p>
+                          {user.bio && <p className="text-sm text-gray-600 mt-1 italic">"{user.bio}"</p>}
                         </div>
                       </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => handleAdminAction(user.id, 'REJECT')}
+                          className="px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium flex items-center gap-2"
+                        >
+                          <XCircle className="w-4 h-4" /> Reject
+                        </button>
+                        <button 
+                          onClick={() => handleAdminAction(user.id, 'APPROVE')}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-2 shadow-sm"
+                        >
+                          <Check className="w-4 h-4" /> Approve
+                        </button>
+                      </div>
                     </div>
-                    {/* Buttons */}
-                    <div className="flex gap-2 mt-4">
-                        {adminTab === 'PENDING' ? (
-                            <>
-                                <button onClick={() => handleAdminAction(u.id, 'APPROVE')} className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700">Approve</button>
-                                <button onClick={() => handleAdminAction(u.id, 'REJECT')} className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Reject</button>
-                            </>
-                        ) : (
-                            <button onClick={() => handleAdminAction(u.id, 'APPROVE')} className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center justify-center gap-2"><RotateCcw size={14}/> Restore</button>
-                        )}
-                    </div>
-                    {u.role === UserRole.PRODUCER && u.bio && (
-                        <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600 italic border border-gray-100">
-                            "{u.bio}"
-                        </div>
-                    )}
-                  </div>
-                ))}
-                {users.filter(u => u.status === adminTab).length === 0 && (
-                  <div className="col-span-full py-12 text-center text-gray-500">
-                     No users in this list.
-                  </div>
-                )}
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {view === 'DASHBOARD' && currentUser.role === UserRole.PRODUCER && (
+          <div className="animate-fadeIn">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+               <div>
+                  <h1 className="text-2xl font-bold text-gray-900">Producer Dashboard</h1>
+                  <p className="text-gray-500">Manage your farm's inventory and availability.</p>
+               </div>
+               <div className="flex bg-white rounded-lg shadow-sm border border-gray-200 p-1">
+                  <button 
+                    onClick={() => setDashboardView('LIST')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${dashboardView === 'LIST' ? 'bg-green-100 text-green-800 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    <LayoutGrid className="w-4 h-4" /> List
+                  </button>
+                  <button 
+                    onClick={() => setDashboardView('CALENDAR')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${dashboardView === 'CALENDAR' ? 'bg-green-100 text-green-800 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    <CalendarIcon className="w-4 h-4" /> Calendar
+                  </button>
+               </div>
+            </div>
+
+            {dashboardView === 'CALENDAR' ? renderCalendar() : (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                 <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-gray-800">Product Inventory</h2>
+                    <button 
+                      onClick={() => setIsAddProductOpen(true)}
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors flex items-center gap-2"
+                    >
+                       <Plus className="w-4 h-4" /> Add Product
+                    </button>
+                 </div>
+                 <table className="w-full text-left">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                       <tr>
+                          <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Product</th>
+                          <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Price</th>
+                          <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Availability</th>
+                          <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                       </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                       {myProducts.map(p => (
+                          <tr key={p.id} className="hover:bg-gray-50">
+                             <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                   <img src={p.imageUrl} alt="" className="w-10 h-10 rounded-lg object-cover bg-gray-100"/>
+                                   <div>
+                                      <p className="font-medium text-gray-900">{p.name}</p>
+                                      <p className="text-xs text-gray-500">{p.category}</p>
+                                   </div>
+                                </div>
+                             </td>
+                             <td className="px-6 py-4 text-sm text-gray-600">${p.price.toFixed(2)} / {p.unit}</td>
+                             <td className="px-6 py-4 text-sm">
+                                {p.availableFrom && p.availableUntil ? (
+                                   <div className="flex flex-col">
+                                      <span className="text-green-700 font-medium text-xs bg-green-50 px-2 py-1 rounded w-fit">
+                                         {new Date(p.availableFrom).toLocaleDateString()}
+                                      </span>
+                                      <span className="text-gray-400 text-[10px] my-0.5 ml-2">to</span>
+                                      <span className="text-orange-700 font-medium text-xs bg-orange-50 px-2 py-1 rounded w-fit">
+                                         {new Date(p.availableUntil).toLocaleDateString()}
+                                      </span>
+                                   </div>
+                                ) : (
+                                   <span className="text-gray-400 text-sm italic">Not set</span>
+                                )}
+                             </td>
+                             <td className="px-6 py-4">
+                                <button className="p-2 text-gray-400 hover:text-green-600 transition-colors">
+                                   <Edit className="w-4 h-4" />
+                                </button>
+                             </td>
+                          </tr>
+                       ))}
+                    </tbody>
+                 </table>
               </div>
             )}
           </div>
         )}
-
-        {/* VIEW: MARKETPLACE */}
-        {currentView === 'MARKETPLACE' && (
-          <div className="p-6 max-w-7xl mx-auto w-full animate-fadeIn">
-            {/* SEARCH AND FILTER BAR */}
-            <div className="mb-8">
-              <div className="flex flex-col md:flex-row gap-4 mb-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                  <input 
-                    type="text" 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search for fresh produce, honey, eggs..." 
-                    className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-200 shadow-sm focus:ring-2 focus:ring-leaf-500 focus:outline-none"
-                  />
-                  {searchTerm && (
-                    <button onClick={handleSmartSearch} disabled={isSearchingSmart} className="absolute right-3 top-1/2 -translate-y-1/2 text-leaf-600 hover:bg-leaf-50 p-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors">
-                      {isSearchingSmart ? <span className="animate-spin">⌛</span> : <Sparkles size={14} />}
-                      AI Smart Search
-                    </button>
-                  )}
-                </div>
-                <div className={`flex flex-col md:flex-row gap-4 p-3 rounded-xl border transition-all ${showAvailableOnly ? 'bg-leaf-50 border-leaf-200' : 'bg-white border-gray-200'}`}>
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input 
-                      type="checkbox" 
-                      checked={showAvailableOnly} 
-                      onChange={(e) => {
-                        setShowAvailableOnly(e.target.checked);
-                        if (e.target.checked && !filterStartDate) {
-                          setFilterStartDate(new Date().toISOString().split('T')[0]);
-                        }
-                      }}
-                      className="w-5 h-5 text-leaf-600 rounded focus:ring-leaf-500" 
-                    />
-                    <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Filter Availability</span>
-                  </label>
-                  
-                  {showAvailableOnly && (
-                    <div className="flex items-center gap-2 animate-fadeIn">
-                      <div className="flex flex-col">
-                         <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider ml-1">From</span>
-                         <input 
-                           type="date" 
-                           min={new Date().toISOString().split('T')[0]}
-                           value={filterStartDate}
-                           onChange={(e) => setFilterStartDate(e.target.value)}
-                           className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-leaf-500"
-                         />
-                      </div>
-                      <span className="text-gray-400 mt-4"><ArrowRight size={16}/></span>
-                       <div className="flex flex-col">
-                         <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider ml-1">Until</span>
-                         <input 
-                           type="date" 
-                           min={filterStartDate || new Date().toISOString().split('T')[0]}
-                           value={filterEndDate}
-                           onChange={(e) => setFilterEndDate(e.target.value)}
-                           className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-leaf-500"
-                         />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Categories and AI Chips */}
-              <div className="flex items-center justify-between">
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                   {categories.map(cat => (
-                     <button 
-                       key={cat}
-                       onClick={() => setSelectedCategory(cat)}
-                       className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedCategory === cat ? 'bg-leaf-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
-                     >
-                       {cat}
-                     </button>
-                   ))}
-                </div>
-                <button 
-                  onClick={handleAiRecipe} 
-                  disabled={isGeneratingRecipe || filteredProducts.length === 0}
-                  className="hidden md:flex items-center gap-2 text-leaf-700 bg-leaf-50 px-4 py-2 rounded-full text-sm font-medium hover:bg-leaf-100 transition-colors"
-                >
-                  {isGeneratingRecipe ? <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full"/> : <ChefHat size={18} />}
-                  Suggest Recipe
-                </button>
-              </div>
-
-              {smartKeywords.length > 0 && (
-                <div className="mt-3 flex gap-2 flex-wrap">
-                  <span className="text-xs text-gray-400 py-1">Smart Results:</span>
-                  {smartKeywords.map(kw => (
-                    <span key={kw} className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-xs font-medium border border-purple-100 flex items-center gap-1">
-                      <Sparkles size={10} /> {kw}
-                    </span>
-                  ))}
-                  <button onClick={() => {setSmartKeywords([]); setSearchTerm('');}} className="text-xs text-gray-400 underline hover:text-gray-600 ml-2">Clear</button>
-                </div>
-              )}
+        
+        {view === 'MARKETPLACE' && (
+          <>
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-2xl font-bold text-gray-800">Marketplace</h1>
+              <button 
+                onClick={handleGenerateRecipe}
+                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                disabled={isRecipeLoading}
+              >
+                <Sparkles className="w-4 h-4" />
+                {isRecipeLoading ? 'Thinking...' : 'Inspire Me'}
+              </button>
             </div>
 
-            {/* PRODUCT GRID */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* AI Recipe Input Section */}
+            <div className="mb-8 p-6 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-100 animate-fadeIn shadow-sm">
+              <div className="flex flex-col md:flex-row gap-4 items-end">
+                <div className="flex-1 w-full">
+                  <label className="block text-sm font-semibold text-orange-900 mb-2 flex items-center gap-2">
+                    <ChefHat className="w-4 h-4" /> Fridge-to-Table
+                  </label>
+                  <input 
+                    type="text"
+                    value={pantryIngredients}
+                    onChange={(e) => setPantryIngredients(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handlePantryRecipe()}
+                    placeholder="Enter ingredients you have (e.g. carrots, eggs, flour)..."
+                    className="w-full px-4 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none bg-white"
+                  />
+                </div>
+                <button 
+                  onClick={handlePantryRecipe}
+                  disabled={!pantryIngredients.trim() || isRecipeLoading}
+                  className="px-6 py-2 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {isRecipeLoading ? 'Cooking up ideas...' : 'Get Recipe'}
+                </button>
+              </div>
+            </div>
+
+            {aiRecipe && (
+              <div className="mb-8 p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100 animate-fadeIn shadow-sm">
+                 <div className="flex justify-between items-start">
+                    <h3 className="text-xl font-bold text-purple-900 mb-2">{aiRecipe.title}</h3>
+                    <button onClick={() => setAiRecipe(null)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
+                 </div>
+                 <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="font-semibold text-purple-800 mb-1">Ingredients</h4>
+                      <ul className="list-disc list-inside text-gray-700 text-sm">
+                        {aiRecipe.ingredients.map((ing, i) => <li key={i}>{ing}</li>)}
+                      </ul>
+                    </div>
+                    <div>
+                       <h4 className="font-semibold text-purple-800 mb-1">Instructions</h4>
+                       <p className="text-gray-700 text-sm">{aiRecipe.instructions}</p>
+                    </div>
+                 </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filteredProducts.map(product => {
                 const producer = users.find(u => u.id === product.producerId);
-                const isSaved = wishlist.includes(product.id);
-                const showMap = mapVisibleProductIds.has(product.id);
-
                 return (
-                  <div key={product.id} className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-white/50 overflow-hidden flex flex-col group animate-fadeIn">
-                    <div className="relative h-48 overflow-hidden bg-gray-100">
-                      {showMap ? (
-                        <iframe 
-                          width="100%" 
-                          height="100%" 
-                          frameBorder="0" 
-                          style={{border:0}} 
-                          src={`https://maps.google.com/maps?q=${encodeURIComponent(producer?.location || '')}&output=embed`}
-                          allowFullScreen
-                        ></iframe>
-                      ) : (
-                        <img 
-                          src={product.imageUrl} 
-                          alt={product.name} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                      )}
-                      
-                      {currentUser?.role === 'CONSUMER' && (
-                         <button 
-                           onClick={(e) => { e.stopPropagation(); toggleWishlist(product.id); }}
-                           className="absolute top-3 right-3 p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-sm hover:bg-white transition-colors"
-                         >
-                           <Heart size={18} className={isSaved ? "fill-red-500 text-red-500" : "text-gray-400"} />
-                         </button>
-                      )}
-                      
-                      {/* Map Toggle Button */}
-                      {producer?.location && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); toggleProductMap(product.id); }}
-                          className="absolute bottom-3 right-3 p-2 bg-white/90 backdrop-blur-sm rounded-full shadow-sm hover:bg-white transition-colors text-gray-600"
-                          title="Toggle Map View"
-                        >
-                          {showMap ? <ImageIcon size={16}/> : <MapPin size={16}/>}
-                        </button>
-                      )}
-
-                      {!product.inStock && (
-                        <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center">
-                          <span className="bg-gray-800 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide">Out of Stock</span>
-                        </div>
-                      )}
+                  <div key={product.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100 overflow-hidden group">
+                    <div className="h-48 overflow-hidden relative">
+                       <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                       <button className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-full hover:text-red-500 transition-colors shadow-sm">
+                          <Heart className="w-4 h-4" />
+                       </button>
                     </div>
                     
-                    <div className="p-4 flex-1 flex flex-col cursor-pointer" onClick={() => setSelectedProduct(product)}>
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="text-[10px] font-bold tracking-wider text-leaf-600 uppercase">{product.category}</span>
-                        <div className="flex items-center text-yellow-400 text-xs gap-0.5">
-                           <Star size={12} fill="currentColor"/> 
-                           <span className="text-gray-600 ml-0.5">{getProducerRating(product.producerId).toFixed(1)}</span>
-                        </div>
+                    <div className="p-4">
+                      <div className="flex justify-between items-start mb-2">
+                         <span className="px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-semibold uppercase tracking-wide rounded-full">{product.category}</span>
+                         <span className="font-bold text-green-700">${product.price.toFixed(2)} <span className="text-gray-400 text-xs font-normal">/ {product.unit}</span></span>
                       </div>
-                      <h3 className="font-bold text-gray-900 mb-1 leading-tight group-hover:text-leaf-700 transition-colors">{product.name}</h3>
+
+                      <h3 className="font-bold text-gray-900 mb-1 leading-tight group-hover:text-green-700 transition-colors">{product.name}</h3>
                       
                       <div 
-                        className="flex items-center gap-1 mb-3 cursor-pointer group/producer" 
+                        className="mb-3 cursor-pointer group/producer" 
                         onClick={(e) => { e.stopPropagation(); setSelectedProducer(producer || null); }}
                       >
-                         <p className="text-xs text-gray-500 truncate group-hover/producer:text-leaf-600 group-hover/producer:underline transition-colors">{producer?.name}</p>
-                         {producer?.status === UserStatus.APPROVED && <VerifiedBadge />}
+                         <div className="flex items-center gap-1">
+                            <p className="text-xs text-gray-500 truncate group-hover/producer:text-green-600 group-hover/producer:underline transition-colors">{producer?.name}</p>
+                            {producer?.status === UserStatus.APPROVED && <VerifiedBadge />}
+                         </div>
+                         {producer?.bio && (
+                           <p className="text-[10px] text-gray-400 truncate mt-0.5" title={producer.bio}>{producer.bio}</p>
+                         )}
                       </div>
 
                       {product.availableFrom && (
-                         <div className="text-[10px] text-gray-400 mb-3 flex items-center gap-1">
-                            <Calendar size={10}/> {product.availableFrom.slice(5)} → {product.availableUntil?.slice(5)}
-                         </div>
+                        <p className="text-[10px] text-gray-400 mb-2">
+                           Harvested: {new Date(product.availableFrom).toLocaleDateString()}
+                        </p>
                       )}
 
-                      <div className="mt-auto flex items-center justify-between">
-                        <p className="font-bold text-gray-900 text-lg">${product.price.toFixed(2)} <span className="text-sm font-normal text-gray-500">/ {product.unit}</span></p>
-                        <button className="bg-leaf-600 text-white p-2 rounded-lg hover:bg-leaf-700 transition-colors shadow-sm shadow-leaf-200">
-                          <Plus size={20} />
+                      <p className="text-sm text-gray-600 mb-4 line-clamp-2 min-h-[40px]">{product.description}</p>
+                      
+                      <div className="flex gap-2">
+                        <button className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
+                           <ShoppingBasket className="w-4 h-4" /> Add
+                        </button>
+                        <button 
+                          onClick={() => enhanceDescription(product.id)}
+                          className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
+                          title="Enhance with Gemini"
+                        >
+                           <Sparkles className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -1140,465 +652,259 @@ const App: React.FC = () => {
                 );
               })}
             </div>
-          </div>
+          </>
         )}
 
-        {/* VIEW: CONSUMER WISHLIST */}
-        {currentView === 'WISHLIST' && (
-          <div className="p-6 max-w-7xl mx-auto w-full animate-fadeIn">
-            <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <Heart className="text-red-500 fill-red-500" /> My Wishlist
-            </h1>
-            {wishlist.length === 0 ? (
-               <div className="text-center py-20 bg-white/50 rounded-2xl border border-dashed border-gray-300">
-                 <p className="text-gray-500 text-lg">Your wishlist is empty.</p>
-                 <button onClick={() => setCurrentView('MARKETPLACE')} className="mt-4 text-leaf-600 font-medium hover:underline">Browse Products</button>
-               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                 {products.filter(p => wishlist.includes(p.id)).map(product => {
-                    // Reuse Product Card Logic (Simplified)
-                    return (
-                      <div key={product.id} className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 overflow-hidden flex flex-col">
-                        <div className="relative h-48 bg-gray-100">
-                           <img src={product.imageUrl} className="w-full h-full object-cover" />
-                           <button onClick={() => toggleWishlist(product.id)} className="absolute top-3 right-3 p-2 bg-white rounded-full shadow text-red-500"><X size={16}/></button>
-                        </div>
-                        <div className="p-4">
-                           <h3 className="font-bold text-gray-900">{product.name}</h3>
-                           <p className="text-leaf-600 font-bold mt-2">${product.price.toFixed(2)}</p>
-                        </div>
-                      </div>
-                    );
-                 })}
-              </div>
-            )}
+        {view === 'MESSAGES' && (
+          <div className="h-[calc(100vh-140px)] animate-fadeIn">
+             <ChatInterface 
+                currentUser={currentUser} 
+                users={users} 
+                messages={messages} 
+                onSendMessage={handleSendMessage}
+                initialSelectedUserId={selectedProducer?.id}
+             />
           </div>
         )}
+      </main>
 
-        {/* VIEW: MESSAGES */}
-        {currentView === 'MESSAGES' && currentUser && (
-          <div className="p-6 max-w-6xl mx-auto w-full h-full flex flex-col animate-fadeIn">
-            <h1 className="text-2xl font-bold text-gray-800 mb-6">Messages</h1>
-            <ChatInterface 
-              currentUser={currentUser}
-              users={users}
-              messages={messages}
-              initialSelectedUserId={activeConversationId}
-              onSendMessage={(receiverId, content) => {
-                const newMessage: Message = {
-                  id: `m${Date.now()}`,
-                  senderId: currentUser.id,
-                  receiverId,
-                  content,
-                  timestamp: Date.now()
-                };
-                setMessages([...messages, newMessage]);
-              }}
-            />
-          </div>
-        )}
-
-        {/* VIEW: PRODUCER DASHBOARD */}
-        {currentView === 'DASHBOARD' && currentUser?.role === UserRole.PRODUCER && (
-          <div className="p-6 max-w-6xl mx-auto w-full animate-fadeIn">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-800">Producer Dashboard</h1>
-                <p className="text-gray-500">Manage your farm profile and inventory</p>
-              </div>
-              <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200 flex items-center gap-3">
-                 <div className="text-right">
-                   <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Rating</p>
-                   <div className="flex items-center gap-1 text-yellow-400 font-bold">
-                     <span className="text-gray-800 text-lg">{getProducerRating(currentUser.id).toFixed(1)}</span> <Star size={16} fill="currentColor"/>
-                   </div>
-                 </div>
-                 <div className="h-8 w-px bg-gray-200"></div>
-                 <div className="text-right">
-                   <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Reviews</p>
-                   <p className="text-gray-800 font-bold text-lg">{getProducerReviewCount(currentUser.id)}</p>
-                 </div>
-              </div>
+      {/* Add Product Modal */}
+      {isAddProductOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fadeIn">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-modalPop">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900">Add New Product</h2>
+              <button onClick={() => setIsAddProductOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={24} />
+              </button>
             </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Left Col: Profile & Add Product */}
-              <div className="space-y-6">
-                {/* Profile Card */}
-                <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
-                   <div className="flex justify-between items-start mb-4">
-                     <h2 className="font-bold text-lg text-gray-800">My Profile</h2>
-                     {!isEditingProfile && <button onClick={() => { setEditName(currentUser.name); setEditLocation(currentUser.location || ''); setEditBio(currentUser.bio || ''); setIsEditingProfile(true); }} className="text-leaf-600 hover:bg-leaf-50 p-2 rounded-lg transition-colors"><Edit2 size={18}/></button>}
-                   </div>
-                   
-                   {isEditingProfile ? (
-                     <div className="space-y-3">
-                        <input className="w-full p-2 border rounded text-sm" value={editName} onChange={e => setEditName(e.target.value)} placeholder="Name"/>
-                        <input className="w-full p-2 border rounded text-sm" value={editLocation} onChange={e => setEditLocation(e.target.value)} placeholder="Location"/>
-                        <textarea className="w-full p-2 border rounded text-sm" value={editBio} onChange={e => setEditBio(e.target.value)} rows={3} placeholder="Bio"/>
-                        <div className="flex gap-2">
-                          <button onClick={handleSaveProfile} className="flex-1 bg-leaf-600 text-white py-1.5 rounded text-sm">Save</button>
-                          <button onClick={() => setIsEditingProfile(false)} className="flex-1 border border-gray-300 py-1.5 rounded text-sm">Cancel</button>
-                        </div>
-                     </div>
-                   ) : (
-                     <>
-                        <div className="flex items-center gap-4 mb-4">
-                          <div className="w-16 h-16 bg-gray-100 rounded-full overflow-hidden">
-                             {currentUser.avatarUrl ? <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-full h-full object-cover"/> : <UserIcon className="text-gray-400 m-4"/>}
-                          </div>
-                          <div>
-                             <h3 className="font-bold text-gray-900 flex items-center gap-1">{currentUser.name} {currentUser.status === UserStatus.APPROVED && <VerifiedBadge />}</h3>
-                             <p className="text-sm text-gray-500 flex items-center gap-1"><MapPin size={12}/> {currentUser.location}</p>
-                          </div>
-                        </div>
-                        <p className="text-sm text-gray-600 italic border-l-2 border-leaf-300 pl-3">{currentUser.bio}</p>
-                     </>
-                   )}
-                </div>
-
-                {/* Add Product Form */}
-                <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-white/50 p-6">
-                  <h2 className="font-bold text-lg text-gray-800 mb-4">{editingProductId ? 'Edit Product' : 'Add New Product'}</h2>
-                  <div className="space-y-4">
-                    <input type="text" value={newProdName} onChange={e => setNewProdName(e.target.value)} placeholder="Product Name (e.g. Heirloom Carrots)" className="w-full p-3 bg-gray-50 border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-leaf-500 focus:outline-none" />
-                    
-                    <div className="grid grid-cols-2 gap-3">
-                       <select value={newProdCat} onChange={e => setNewProdCat(e.target.value)} className="p-3 bg-gray-50 border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-leaf-500 focus:outline-none">
-                         <option>Vegetables</option><option>Fruits</option><option>Dairy & Eggs</option><option>Pantry</option><option>Meat</option>
-                       </select>
-                       <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                          <input type="number" value={newProdPrice} onChange={e => setNewProdPrice(e.target.value)} placeholder="0.00" className="w-full pl-6 p-3 bg-gray-50 border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-leaf-500 focus:outline-none" />
-                       </div>
-                    </div>
-                    
-                    {/* Image Upload */}
-                    <div className="relative group">
-                       <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="prod-image-upload" />
-                       <label htmlFor="prod-image-upload" className="block w-full h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-leaf-400 hover:bg-leaf-50 transition-colors bg-gray-50 overflow-hidden relative">
-                          {newProdImage ? (
-                            <>
-                              <img src={newProdImage} alt="Preview" className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <span className="text-white text-xs font-medium flex items-center gap-1"><Upload size={14}/> Change</span>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-center text-gray-400">
-                              <ImageIcon size={24} className="mx-auto mb-2"/>
-                              <span className="text-xs">Upload Photo (Max 5MB)</span>
-                            </div>
-                          )}
-                       </label>
-                       {newProdImage && (
-                          <button onClick={(e) => {e.preventDefault(); setNewProdImage(null);}} className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-sm text-gray-500 hover:text-red-500"><X size={14}/></button>
-                       )}
-                    </div>
-                    {imageError && <p className="text-xs text-red-500">{imageError}</p>}
-
-                    <div className="relative">
-                      <textarea value={newProdDesc} onChange={e => setNewProdDesc(e.target.value)} placeholder="Description..." rows={3} className="w-full p-3 bg-gray-50 border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-leaf-500 focus:outline-none" />
-                      <button 
-                        onClick={handleGenerateDescription} 
-                        disabled={isGeneratingDesc}
-                        title={newProdName.trim() ? "Generate Description with AI" : "Enter product name first"}
-                        className={`absolute right-2 bottom-2 p-2 rounded-lg transition-colors ${newProdName.trim() ? 'text-leaf-600 hover:bg-leaf-100' : 'text-gray-300 cursor-not-allowed'}`}
-                      >
-                         {isGeneratingDesc ? <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full"/> : <Sparkles size={16} />}
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                       <div>
-                         <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1 block">Available From</label>
-                         <input type="date" value={newProdAvailableFrom} onChange={e => setNewProdAvailableFrom(e.target.value)} className="w-full p-2 bg-gray-50 border-gray-200 rounded-lg text-xs" />
-                       </div>
-                       <div>
-                         <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1 block">Until</label>
-                         <input type="date" value={newProdAvailableUntil} onChange={e => setNewProdAvailableUntil(e.target.value)} className="w-full p-2 bg-gray-50 border-gray-200 rounded-lg text-xs" />
-                       </div>
-                    </div>
-
-                    <button onClick={handleAddProduct} className="w-full bg-leaf-600 text-white py-3 rounded-xl font-medium hover:bg-leaf-700 transition-colors shadow-lg shadow-leaf-200 flex items-center justify-center gap-2">
-                       {editingProductId ? <><Check size={18}/> Update Product</> : <><Plus size={18}/> Add Product</>}
-                    </button>
-                    {editingProductId && <button onClick={() => { setEditingProductId(null); setNewProdName(''); setNewProdDesc(''); setNewProdPrice(''); setNewProdImage(null); }} className="w-full text-gray-500 text-sm hover:underline">Cancel Edit</button>}
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Col: Inventory */}
-              <div className="lg:col-span-2 space-y-6">
-                 {/* Inventory Header & Toggle */}
-                 <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-sm border border-white/50 p-4 flex justify-between items-center">
-                    <h2 className="font-bold text-gray-800">My Inventory</h2>
-                    <div className="bg-gray-100 p-1 rounded-lg flex text-sm">
-                      <button onClick={() => setInventoryView('LIST')} className={`px-3 py-1.5 rounded-md transition-all ${inventoryView === 'LIST' ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-700'}`}>List</button>
-                      <button onClick={() => setInventoryView('CALENDAR')} className={`px-3 py-1.5 rounded-md transition-all ${inventoryView === 'CALENDAR' ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-700'}`}>Calendar</button>
-                    </div>
-                 </div>
-
-                 {inventoryView === 'CALENDAR' ? renderProducerCalendar() : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fadeIn">
-                       {products.filter(p => p.producerId === currentUser.id).map(p => (
-                         <div key={p.id} className="bg-white rounded-xl border border-gray-200 p-4 flex gap-4 hover:border-leaf-300 transition-colors group">
-                           <img src={p.imageUrl} alt={p.name} className="w-20 h-20 rounded-lg object-cover bg-gray-100" />
-                           <div className="flex-1">
-                             <div className="flex justify-between items-start">
-                               <h3 className="font-bold text-gray-900">{p.name}</h3>
-                               <button onClick={() => { 
-                                 setEditingProductId(p.id); 
-                                 setNewProdName(p.name); 
-                                 setNewProdCat(p.category); 
-                                 setNewProdDesc(p.description); 
-                                 setNewProdPrice(p.price.toString()); 
-                                 setNewProdAvailableFrom(p.availableFrom || ''); 
-                                 setNewProdAvailableUntil(p.availableUntil || ''); 
-                                 setNewProdImage(p.imageUrl);
-                               }} className="text-gray-400 hover:text-leaf-600 p-1"><Edit2 size={16}/></button>
-                             </div>
-                             <p className="text-sm text-gray-500 mb-2 truncate">{p.description}</p>
-                             <div className="flex justify-between items-end">
-                               <span className="text-leaf-700 font-bold bg-leaf-50 px-2 py-0.5 rounded text-sm">${p.price}</span>
-                               <span className={`text-xs px-2 py-1 rounded-full ${p.inStock ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                 {p.inStock ? 'In Stock' : 'Sold Out'}
-                               </span>
-                             </div>
+            
+            <div className="p-6 max-h-[80vh] overflow-y-auto">
+              <div className="space-y-4">
+                {/* Image Upload with Preview */}
+                <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-2">Product Image</label>
+                   <div className="flex items-center justify-center w-full">
+                      {newProdImage ? (
+                        <div className="relative w-full h-48 rounded-lg overflow-hidden group">
+                           <img src={newProdImage} alt="Preview" className="w-full h-full object-cover" />
+                           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button 
+                                onClick={() => setNewProdImage('')} 
+                                className="bg-white/90 text-red-600 px-3 py-1 rounded-full text-sm font-medium"
+                              >
+                                Remove
+                              </button>
                            </div>
-                         </div>
-                       ))}
-                       {products.filter(p => p.producerId === currentUser.id).length === 0 && (
-                         <div className="col-span-full py-10 text-center text-gray-500 border-2 border-dashed border-gray-200 rounded-xl">
-                            No products yet. Add your first item!
-                         </div>
-                       )}
-                    </div>
-                 )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                <ImageIcon className="w-8 h-8 mb-4 text-gray-500" />
+                                <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Click to upload</span></p>
+                                <p className="text-xs text-gray-500">SVG, PNG, JPG or GIF (MAX. 5MB)</p>
+                            </div>
+                            <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                        </label>
+                      )}
+                   </div>
+                </div>
 
-      {/* --- MODALS --- */}
-      
-      {/* AI RECIPE MODAL */}
-      {aiRecipe && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl animate-modalPop relative">
-            <button onClick={() => setAiRecipe(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={24} /></button>
-            <div className="flex items-center gap-3 mb-4 text-leaf-700">
-               <ChefHat size={32} />
-               <h2 className="text-2xl font-bold">Chef's Suggestion</h2>
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">{aiRecipe.title}</h3>
-            <div className="mb-4">
-              <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Ingredients</h4>
-              <ul className="list-disc pl-5 space-y-1 text-gray-700">
-                {aiRecipe.ingredients.map((ing, i) => <li key={i}>{ing}</li>)}
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Instructions</h4>
-              <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{aiRecipe.instructions}</p>
-            </div>
-          </div>
-        </div>
-      )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                    value={newProdName}
+                    onChange={(e) => setNewProdName(e.target.value)}
+                    placeholder="e.g. Organic Carrots"
+                  />
+                </div>
 
-      {/* PRODUCT DETAILS MODAL */}
-      {selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn" onClick={() => setSelectedProduct(null)}>
-           <div className="bg-white rounded-3xl max-w-4xl w-full overflow-hidden shadow-2xl flex flex-col md:flex-row animate-modalPop" onClick={e => e.stopPropagation()}>
-              <div className="md:w-1/2 h-64 md:h-auto bg-gray-100 relative">
-                 <img src={selectedProduct.imageUrl} className="w-full h-full object-cover" />
-                 {currentUser?.role === 'CONSUMER' && (
-                    <button 
-                      onClick={() => toggleWishlist(selectedProduct.id)}
-                      className="absolute top-4 right-4 p-3 bg-white/80 backdrop-blur rounded-full shadow-lg hover:bg-white transition-all hover:scale-110"
-                    >
-                      <Heart size={24} className={wishlist.includes(selectedProduct.id) ? "fill-red-500 text-red-500" : "text-gray-600"} />
-                    </button>
-                 )}
-              </div>
-              <div className="md:w-1/2 p-8 flex flex-col relative">
-                 <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded-full"><X size={24} className="text-gray-400"/></button>
-                 
-                 <div className="mb-2">
-                    <span className="text-leaf-600 font-bold uppercase tracking-wider text-xs bg-leaf-50 px-3 py-1 rounded-full">{selectedProduct.category}</span>
-                 </div>
-                 <h2 className="text-3xl font-bold text-gray-900 mb-2">{selectedProduct.name}</h2>
-                 
-                 {/* Producer Info Link */}
-                 <div 
-                   className="flex items-center gap-2 mb-6 cursor-pointer hover:bg-gray-50 p-2 -ml-2 rounded-lg transition-colors w-fit"
-                   onClick={() => {
-                      const producer = users.find(u => u.id === selectedProduct.producerId);
-                      if (producer) {
-                        setSelectedProduct(null);
-                        setSelectedProducer(producer);
-                      }
-                   }}
-                 >
-                    <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden">
-                       <UserIcon className="m-1.5 text-gray-500" size={20}/>
-                    </div>
-                    <div>
-                       <p className="text-sm text-gray-500">Sold by</p>
-                       <p className="font-semibold text-gray-900 flex items-center gap-1">
-                         {users.find(u => u.id === selectedProduct.producerId)?.name}
-                         {users.find(u => u.id === selectedProduct.producerId)?.status === UserStatus.APPROVED && <VerifiedBadge />}
-                       </p>
-                    </div>
-                 </div>
-
-                 <p className="text-gray-600 leading-relaxed mb-6">{selectedProduct.description}</p>
-                 
-                 {selectedProduct.availableFrom && (
-                   <div className="bg-blue-50 text-blue-800 px-4 py-3 rounded-xl mb-6 flex items-center gap-3">
-                      <Calendar size={20} />
-                      <div>
-                        <p className="text-xs font-bold uppercase opacity-70">Seasonality</p>
-                        <p className="font-medium">Available {selectedProduct.availableFrom} to {selectedProduct.availableUntil}</p>
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+                      <div className="relative">
+                         <span className="absolute left-3 top-2 text-gray-500">$</span>
+                         <input 
+                           type="number" 
+                           className="w-full pl-6 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                           value={newProdPrice}
+                           onChange={(e) => setNewProdPrice(e.target.value)}
+                           placeholder="0.00"
+                         />
                       </div>
                    </div>
-                 )}
+                   <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                      <select 
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white"
+                        value={newProdUnit}
+                        onChange={(e) => setNewProdUnit(e.target.value)}
+                      >
+                         {PRODUCT_UNITS.map(unit => (
+                           <option key={unit} value={unit}>{unit}</option>
+                         ))}
+                      </select>
+                   </div>
+                </div>
 
-                 <div className="mt-auto pt-6 border-t border-gray-100 flex items-center justify-between">
-                    <div>
-                       <p className="text-3xl font-bold text-gray-900">${selectedProduct.price.toFixed(2)}</p>
-                       <p className="text-gray-500">per {selectedProduct.unit}</p>
-                    </div>
-                    {/* Simplified Contact Button if needed or generic add to cart */}
-                    <button className="bg-leaf-600 text-white px-8 py-3 rounded-xl font-bold text-lg hover:bg-leaf-700 transition-shadow shadow-lg shadow-leaf-200 transform active:scale-95">
-                       Add to Basket
-                    </button>
-                 </div>
+                <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                   <textarea 
+                     className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none h-24"
+                     value={newProdDesc}
+                     onChange={(e) => setNewProdDesc(e.target.value)}
+                     placeholder="Describe your product..."
+                   />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Available From</label>
+                      <input 
+                        type="date"
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                        value={newProdFrom}
+                        onChange={(e) => setNewProdFrom(e.target.value)}
+                      />
+                   </div>
+                   <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Available Until</label>
+                      <input 
+                        type="date"
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                        value={newProdUntil}
+                        onChange={(e) => setNewProdUntil(e.target.value)}
+                      />
+                   </div>
+                </div>
               </div>
-           </div>
+            </div>
+            
+            <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
+               <button 
+                  onClick={() => setIsAddProductOpen(false)}
+                  className="px-4 py-2 text-gray-700 font-medium hover:bg-gray-100 rounded-lg"
+               >
+                  Cancel
+               </button>
+               <button 
+                  onClick={handleAddProduct}
+                  className="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+               >
+                  Create Product
+               </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* PRODUCER PROFILE MODAL */}
+      {/* Producer Profile Modal */}
       {selectedProducer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn" onClick={() => setSelectedProducer(null)}>
-           <div className="bg-white rounded-2xl max-w-2xl w-full p-8 shadow-2xl relative animate-modalPop max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-              <button onClick={() => setSelectedProducer(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={24}/></button>
-              
-              <div className="flex items-start gap-6 mb-8">
-                 <div className="w-24 h-24 rounded-full bg-gray-200 shrink-0 overflow-hidden shadow-md">
-                   {selectedProducer.avatarUrl ? <img src={selectedProducer.avatarUrl} className="w-full h-full object-cover"/> : <UserIcon className="w-full h-full p-6 text-gray-400"/>}
-                 </div>
-                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-1 flex items-center gap-2">
-                      {selectedProducer.name} 
-                      {selectedProducer.status === UserStatus.APPROVED && <VerifiedBadge />}
-                    </h2>
-                    <p className="text-gray-500 flex items-center gap-1 mb-2"><MapPin size={16}/> {selectedProducer.location}</p>
-                    
-                    {/* Show email only to logged in consumers/admin */}
-                    {currentUser && (currentUser.role === UserRole.CONSUMER || currentUser.role === UserRole.ADMIN) && (
-                      <p className="text-sm text-gray-600 flex items-center gap-1.5 mb-2 bg-gray-50 px-2 py-1 rounded w-fit">
-                        <Mail size={14}/> {selectedProducer.email}
-                      </p>
-                    )}
-
-                    <div className="flex items-center gap-4 text-sm mt-3">
-                       <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-lg border border-yellow-100">
-                          <Star size={16} className="text-yellow-400 fill-yellow-400"/> 
-                          <span className="font-bold text-gray-800">{getProducerRating(selectedProducer.id).toFixed(1)}</span>
-                          <span className="text-gray-500">({getProducerReviewCount(selectedProducer.id)} reviews)</span>
-                       </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fadeIn">
+           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden animate-modalPop max-h-[90vh] flex flex-col">
+              <div className="h-32 bg-green-600 relative">
+                 <button 
+                   onClick={() => setSelectedProducer(null)} 
+                   className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full hover:bg-black/40 transition-colors"
+                 >
+                    <X size={20} />
+                 </button>
+                 <div className="absolute -bottom-12 left-8">
+                    <div className="w-24 h-24 rounded-full border-4 border-white bg-white shadow-md overflow-hidden">
+                       <img src={selectedProducer.avatarUrl || `https://ui-avatars.com/api/?name=${selectedProducer.name}`} alt={selectedProducer.name} className="w-full h-full object-cover"/>
                     </div>
                  </div>
               </div>
-
-              {/* Action Buttons */}
-              {currentUser?.role === UserRole.CONSUMER && (
-                <div className="flex gap-3 mb-8">
-                  <button 
-                    onClick={() => handleContactProducer(selectedProducer.id)} 
-                    className="flex-1 bg-leaf-600 text-white py-2.5 rounded-xl font-semibold hover:bg-leaf-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
-                  >
-                    <MessageSquare size={18}/> Contact Producer
-                  </button>
-                  <button 
-                    onClick={() => setIsReviewFormOpen(!isReviewFormOpen)}
-                    className="flex-1 bg-white border border-gray-300 text-gray-700 py-2.5 rounded-xl font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Star size={18}/> {isReviewFormOpen ? 'Cancel Review' : 'Write a Review'}
-                  </button>
-                </div>
-              )}
-
-              {/* Bio Section */}
-              <div className="mb-8">
-                <h3 className="font-bold text-gray-800 mb-2">About Us</h3>
-                <p className="text-gray-600 leading-relaxed">{selectedProducer.bio || "No bio available."}</p>
-              </div>
-
-              {/* Location Map */}
-              {selectedProducer.location && (
-                <div className="mb-8">
-                   <h3 className="font-bold text-gray-800 mb-2">Location</h3>
-                   <div className="w-full h-48 bg-gray-100 rounded-xl overflow-hidden border border-gray-200">
-                     <iframe 
-                        width="100%" 
-                        height="100%" 
-                        frameBorder="0" 
-                        style={{border:0}} 
-                        src={`https://maps.google.com/maps?q=${encodeURIComponent(selectedProducer.location)}&output=embed`}
-                        allowFullScreen
-                      ></iframe>
-                   </div>
-                </div>
-              )}
-
-              {/* Review Form */}
-              {isReviewFormOpen && (
-                <div className="bg-gray-50 p-4 rounded-xl mb-8 animate-fadeIn border border-gray-200">
-                   <h3 className="font-bold text-gray-800 mb-3">Leave a Review</h3>
-                   <div className="flex gap-2 mb-3">
-                     {[1,2,3,4,5].map(star => (
-                       <button key={star} onClick={() => setNewReviewRating(star)} type="button">
-                         <Star size={24} className={star <= newReviewRating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"} />
-                       </button>
-                     ))}
-                   </div>
-                   <textarea 
-                     value={newReviewComment}
-                     onChange={(e) => setNewReviewComment(e.target.value)}
-                     className="w-full p-3 border border-gray-300 rounded-lg mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-leaf-500"
-                     placeholder="Share your experience..."
-                     rows={3}
-                   />
-                   <button 
-                     onClick={handleAddReview}
-                     className="bg-leaf-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-leaf-700"
-                   >
-                     Submit Review
-                   </button>
-                </div>
-              )}
-
-              {/* Reviews List */}
-              <div>
-                 <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">Reviews <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full text-gray-500">{getProducerReviewCount(selectedProducer.id)}</span></h3>
-                 <div className="space-y-4">
-                    {reviews.filter(r => r.producerId === selectedProducer.id).map(review => (
-                       <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0">
-                          <div className="flex justify-between items-center mb-1">
-                             <span className="font-semibold text-gray-900">{review.userName}</span>
-                             <span className="text-xs text-gray-400">{new Date(review.timestamp).toLocaleDateString()}</span>
-                          </div>
-                          <div className="mb-2">{renderStars(review.rating)}</div>
-                          <p className="text-sm text-gray-600">{review.comment}</p>
+              
+              <div className="pt-16 px-8 pb-6 overflow-y-auto flex-1">
+                 <div className="flex justify-between items-start mb-2">
+                    <div>
+                       <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                          {selectedProducer.name}
+                          {selectedProducer.status === UserStatus.APPROVED && <VerifiedBadge />}
+                       </h2>
+                       <p className="text-gray-500 flex items-center gap-1 text-sm"><Leaf className="w-3 h-3"/> {selectedProducer.role}</p>
+                       <p className="text-gray-500 text-sm">{selectedProducer.location}</p>
+                    </div>
+                    <div className="flex flex-col items-end">
+                       <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-lg border border-yellow-100">
+                          <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                          <span className="font-bold text-gray-900">{averageRating}</span>
+                          <span className="text-xs text-gray-400">({producerReviews.length})</span>
                        </div>
-                    ))}
-                    {reviews.filter(r => r.producerId === selectedProducer.id).length === 0 && (
-                      <p className="text-gray-400 text-sm italic">No reviews yet.</p>
+                    </div>
+                 </div>
+                 
+                 <p className="text-gray-700 my-4 bg-gray-50 p-4 rounded-lg border border-gray-100">"{selectedProducer.bio || 'No bio available.'}"</p>
+                 
+                 <div className="flex gap-3 mb-8 border-b border-gray-100 pb-6">
+                    <button 
+                       onClick={() => { setView('MESSAGES'); setSelectedProducer(null); }}
+                       className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                    >
+                       <MessageCircle className="w-4 h-4" /> Message Producer
+                    </button>
+                    <button 
+                       onClick={() => setIsReviewFormOpen(!isReviewFormOpen)}
+                       className="flex-1 bg-white border border-gray-200 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                    >
+                       <Star className="w-4 h-4" /> Write a Review
+                    </button>
+                 </div>
+
+                 {isReviewFormOpen && (
+                    <div className="mb-8 bg-gray-50 p-4 rounded-xl border border-gray-200 animate-fadeIn">
+                       <h3 className="font-bold text-gray-800 mb-3">Rate your experience</h3>
+                       <div className="flex gap-2 mb-4">
+                          {[1, 2, 3, 4, 5].map(star => (
+                             <button 
+                               key={star} 
+                               onClick={() => setNewReviewRating(star)}
+                               className="hover:scale-110 transition-transform"
+                             >
+                                <Star className={`w-8 h-8 ${star <= newReviewRating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
+                             </button>
+                          ))}
+                       </div>
+                       <textarea 
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none mb-3"
+                          rows={3}
+                          placeholder="Share your thoughts about this producer..."
+                          value={newReviewComment}
+                          onChange={(e) => setNewReviewComment(e.target.value)}
+                       />
+                       <div className="flex justify-end gap-2">
+                          <button onClick={() => setIsReviewFormOpen(false)} className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
+                          <button onClick={handleSubmitReview} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">Submit Review</button>
+                       </div>
+                    </div>
+                 )}
+
+                 <div>
+                    <h3 className="font-bold text-gray-900 mb-4 text-lg">Reviews</h3>
+                    {producerReviews.length > 0 ? (
+                       <div className="space-y-4">
+                          {producerReviews.map(review => (
+                             <div key={review.id} className="border-b border-gray-100 last:border-0 pb-4 last:pb-0">
+                                <div className="flex justify-between mb-1">
+                                   <span className="font-medium text-gray-900">{review.userName}</span>
+                                   <div className="flex items-center gap-0.5">
+                                      {Array.from({length: 5}).map((_, i) => (
+                                         <Star key={i} className={`w-3 h-3 ${i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'}`} />
+                                      ))}
+                                   </div>
+                                </div>
+                                <p className="text-gray-600 text-sm leading-relaxed">{review.comment}</p>
+                                <p className="text-xs text-gray-400 mt-1">{new Date(review.timestamp).toLocaleDateString()}</p>
+                             </div>
+                          ))}
+                       </div>
+                    ) : (
+                       <div className="text-center py-8 bg-gray-50 rounded-lg text-gray-500 text-sm">
+                          No reviews yet. Be the first to review!
+                       </div>
                     )}
                  </div>
               </div>

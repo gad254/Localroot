@@ -31,14 +31,13 @@ export const generateProductDescription = async (productName: string, category: 
   }
 };
 
-export const suggestRecipe = async (products: Product[]): Promise<any> => {
+export const suggestRecipe = async (ingredients: string): Promise<any> => {
   try {
     const ai = getAiClient();
-    const productNames = products.map(p => p.name).join(", ");
     
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `Suggest one simple recipe I can make using some of these ingredients: ${productNames}.`,
+      contents: `Suggest one simple recipe I can make using some of these ingredients: ${ingredients}.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
