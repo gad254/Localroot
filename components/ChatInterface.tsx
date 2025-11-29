@@ -15,6 +15,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ currentUser, users, messa
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Sync prop changes to state
+  useEffect(() => {
+    if (initialSelectedUserId) {
+      setSelectedUserId(initialSelectedUserId);
+    }
+  }, [initialSelectedUserId]);
+
   // Filter contacts based on existing messages or all producers if user is consumer
   const contacts = users.filter(u => u.id !== currentUser.id && (
     currentUser.role === 'ADMIN' || 

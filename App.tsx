@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   User, Product, ViewState, UserRole, UserStatus, Message, 
   RecipeSuggestion, Review
@@ -10,7 +10,7 @@ import {
   Sparkles, Heart, X, Leaf, Calendar as CalendarIcon, 
   LayoutGrid, ChevronLeft, ChevronRight, Edit, Plus, Store, ChefHat, 
   Image as ImageIcon, Upload, Star, Check, XCircle, UserCheck, Shield, LogOut,
-  BadgeCheck
+  BadgeCheck, TrendingUp, DollarSign, Package, BarChart3, Mail, PenLine
 } from 'lucide-react';
 
 // --- Mock Data ---
@@ -71,6 +71,20 @@ const MOCK_REVIEWS: Review[] = [
 
 const PRODUCT_UNITS = ['lb', 'oz', 'kg', 'g', 'bunch', 'piece', 'box', 'dozen', 'pint', 'quart'];
 
+// Estimated conversion to lbs for demonstration comparison
+const UNIT_TO_LBS: Record<string, number> = {
+  'lb': 1,
+  'oz': 0.0625,
+  'kg': 2.20462,
+  'g': 0.00220462,
+  'bunch': 0.5, // Approx estimate
+  'piece': 0.4, // Approx estimate for average produce item
+  'box': 5.0,   // Approx estimate
+  'dozen': 2.0, // Approx estimate (e.g. eggs)
+  'pint': 0.75,
+  'quart': 2.0
+};
+
 const VerifiedBadge = () => (
   <span className="inline-flex items-center ml-1" title="Verified Producer">
      <BadgeCheck className="w-4 h-4 text-white fill-blue-500" />
@@ -86,6 +100,7 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
   const [reviews, setReviews] = useState<Review[]>(MOCK_REVIEWS);
   const [selectedProducer, setSelectedProducer] = useState<User | null>(null);
+  const [activeChatUserId, setActiveChatUserId] = useState<string | null>(null);
   
   // Recipe State
   const [aiRecipe, setAiRecipe] = useState<RecipeSuggestion | null>(null);
@@ -106,23 +121,51 @@ const App: React.FC = () => {
   const [newProdImage, setNewProdImage] = useState('');
   const [newProdFrom, setNewProdFrom] = useState('');
   const [newProdUntil, setNewProdUntil] = useState('');
+  const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
 
   // Review State
   const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
   const [newReviewRating, setNewReviewRating] = useState(5);
   const [newReviewComment, setNewReviewComment] = useState('');
+  
+  // Marketplace Filter State
+  const [showAvailableOnly, setShowAvailableOnly] = useState(false);
+  const [filterStartDate, setFilterStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterEndDate, setFilterEndDate] = useState('');
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
     const keywords = await smartSearch(searchQuery);
     console.log("AI suggested keywords:", keywords);
+    // In a real app, we would use these keywords to refine the filter
   };
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    p.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProducts = products.filter(p => {
+    // 1. Text Search
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          p.category.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // 2. Availability Filter
+    let matchesAvailability = true;
+    if (showAvailableOnly) {
+       if (!p.availableFrom || !p.availableUntil) {
+         matchesAvailability = false;
+       } else {
+         const pStart = new Date(p.availableFrom);
+         const pEnd = new Date(p.availableUntil);
+         
+         const fStart = new Date(filterStartDate);
+         // If end date is not set, we default to checking availability just on the start date
+         const fEnd = filterEndDate ? new Date(filterEndDate) : fStart; 
+
+         // Check for overlap: (StartA <= EndB) and (EndA >= StartB)
+         matchesAvailability = (pStart <= fEnd) && (pEnd >= fStart);
+       }
+    }
+
+    return matchesSearch && matchesAvailability;
+  });
 
   const handleGenerateRecipe = async () => {
     setIsRecipeLoading(true);
@@ -158,10 +201,29 @@ const App: React.FC = () => {
     const newDesc = await generateProductDescription(product.name, product.category);
     setProducts(products.map(p => p.id === productId ? { ...p, description: newDesc } : p));
   };
-  
+
+  const handleAiDescription = async () => {
+    if (!newProdName || !newProdCategory) {
+      alert("Please enter a product name and category first.");
+      return;
+    }
+    setIsGeneratingDesc(true);
+    const desc = await generateProductDescription(newProdName, newProdCategory);
+    setNewProdDesc(desc);
+    setIsGeneratingDesc(false);
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert("File size too large. Please select an image under 5MB.");
+        return;
+      }
+      if (!file.type.startsWith('image/')) {
+        alert("Invalid file type. Please upload an image.");
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setNewProdImage(reader.result as string);
@@ -171,15 +233,16 @@ const App: React.FC = () => {
   };
 
   const handleAddProduct = () => {
+    if (!newProdName || !newProdPrice) return;
     const newProduct: Product = {
       id: Date.now().toString(),
       producerId: currentUser.id,
       name: newProdName,
       category: newProdCategory,
-      price: parseFloat(newProdPrice) || 0,
-      unit: newProdUnit,
       description: newProdDesc,
-      imageUrl: newProdImage || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400&h=300&fit=crop', // Fallback
+      price: parseFloat(newProdPrice),
+      unit: newProdUnit,
+      imageUrl: newProdImage || 'https://images.unsplash.com/photo-1615485500704-8e99099928b3?w=400&h=300&fit=crop',
       inStock: true,
       availableFrom: newProdFrom,
       availableUntil: newProdUntil
@@ -187,16 +250,25 @@ const App: React.FC = () => {
     setProducts([...products, newProduct]);
     setIsAddProductOpen(false);
     // Reset form
-    setNewProdName('');
-    setNewProdPrice('');
-    setNewProdDesc('');
-    setNewProdImage('');
+    setNewProdName(''); setNewProdCategory('Vegetables'); setNewProdPrice(''); 
+    setNewProdDesc(''); setNewProdImage(''); setNewProdFrom(''); setNewProdUntil(''); setNewProdUnit('lb');
+  };
+
+  const handleAdminAction = (userId: string, action: 'APPROVE' | 'REJECT') => {
+    setUsers(users.map(u => {
+      if (u.id === userId) {
+        return { 
+          ...u, 
+          status: action === 'APPROVE' ? UserStatus.APPROVED : UserStatus.REJECTED,
+          isVerified: action === 'APPROVE'
+        };
+      }
+      return u;
+    }));
   };
 
   const handleSubmitReview = () => {
-    if (!selectedProducer) return;
-    if (!newReviewComment.trim()) return; // Validation: Prevent empty comments
-
+    if (!selectedProducer || !newReviewComment.trim()) return;
     const newReview: Review = {
       id: Date.now().toString(),
       producerId: selectedProducer.id,
@@ -207,17 +279,9 @@ const App: React.FC = () => {
       timestamp: Date.now()
     };
     setReviews([newReview, ...reviews]);
-    setIsReviewFormOpen(false);
     setNewReviewComment('');
     setNewReviewRating(5);
-  };
-
-  const handleAdminAction = (userId: string, action: 'APPROVE' | 'REJECT') => {
-    setUsers(users.map(u => 
-      u.id === userId 
-        ? { ...u, status: action === 'APPROVE' ? UserStatus.APPROVED : UserStatus.REJECTED, isVerified: action === 'APPROVE' } 
-        : u
-    ));
+    setIsReviewFormOpen(false);
   };
 
   // Calendar Logic
@@ -225,17 +289,13 @@ const App: React.FC = () => {
   
   const isProductAvailableOnDate = (product: Product, date: Date) => {
     if (!product.availableFrom || !product.availableUntil) return false;
-    
-    // Parse YYYY-MM-DD string to local date object (midnight)
     const parseDate = (str: string) => {
         const [y, m, d] = str.split('-').map(Number);
         return new Date(y, m - 1, d);
     };
-
     const start = parseDate(product.availableFrom);
     const end = parseDate(product.availableUntil);
     const check = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
     return check >= start && check <= end;
   };
 
@@ -243,8 +303,7 @@ const App: React.FC = () => {
     const year = calendarDate.getFullYear();
     const month = calendarDate.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstDay = new Date(year, month, 1).getDay(); // 0 is Sunday
-    
+    const firstDay = new Date(year, month, 1).getDay();
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     const blanks = Array.from({ length: firstDay }, (_, i) => i);
     const monthName = calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
@@ -275,24 +334,17 @@ const App: React.FC = () => {
 
         <div className="grid grid-cols-7 auto-rows-[120px] bg-gray-100 gap-px border-b border-gray-200">
            {blanks.map((b) => <div key={`blank-${b}`} className="bg-white/50" />)}
-           
            {days.map((day) => {
              const currentDate = new Date(year, month, day);
              const availableProducts = myProducts.filter(p => isProductAvailableOnDate(p, currentDate));
-             
              return (
                <div key={day} className="bg-white p-2 relative hover:bg-gray-50 transition-colors group">
                  <span className={`text-sm font-medium ${availableProducts.length > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
                    {day}
                  </span>
-                 
                  <div className="mt-1 flex flex-col gap-1 overflow-y-auto max-h-[85px] scrollbar-hide">
                     {availableProducts.map(p => (
-                      <div 
-                        key={p.id} 
-                        className="text-[10px] bg-green-100 text-green-800 px-1.5 py-0.5 rounded border border-green-200 truncate cursor-pointer hover:bg-green-200 transition-colors"
-                        title={`${p.name} (${p.category})`}
-                      >
+                      <div key={p.id} className="text-[10px] bg-green-100 text-green-800 px-1.5 py-0.5 rounded border border-green-200 truncate cursor-pointer hover:bg-green-200 transition-colors" title={`${p.name} (${p.category})`}>
                         {p.name}
                       </div>
                     ))}
@@ -305,15 +357,21 @@ const App: React.FC = () => {
     );
   };
 
-  const producerReviews = selectedProducer ? reviews.filter(r => r.producerId === selectedProducer.id) : [];
-  const averageRating = producerReviews.length > 0 
-    ? (producerReviews.reduce((acc, r) => acc + r.rating, 0) / producerReviews.length).toFixed(1)
-    : 'New';
+  const getProducerRating = (producerId: string) => {
+    const producerReviews = reviews.filter(r => r.producerId === producerId);
+    if (producerReviews.length === 0) return 0;
+    return producerReviews.reduce((acc, r) => acc + r.rating, 0) / producerReviews.length;
+  };
 
-  const pendingUsers = users.filter(u => u.status === UserStatus.PENDING);
+  const getPricePerLb = (price: number, unit: string) => {
+     if (unit === 'lb') return null;
+     const factor = UNIT_TO_LBS[unit];
+     if (!factor) return null;
+     return (price / factor).toFixed(2);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 relative">
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20">
       {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -326,22 +384,22 @@ const App: React.FC = () => {
             </div>
 
             <nav className="hidden md:flex gap-4">
-               {currentUser.role === UserRole.PRODUCER && (
-                 <button 
-                    onClick={() => setView('DASHBOARD')}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'DASHBOARD' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:text-green-600'}`}
-                 >
-                    Producer Dashboard
-                 </button>
-               )}
-               {currentUser.role === UserRole.ADMIN && (
-                 <button 
-                    onClick={() => setView('ADMIN')}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'ADMIN' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:text-green-600'}`}
-                 >
-                    Admin Panel
-                 </button>
-               )}
+              {currentUser.role === UserRole.PRODUCER && (
+                <button 
+                  onClick={() => setView('DASHBOARD')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'DASHBOARD' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:text-green-600'}`}
+                >
+                  Dashboard
+                </button>
+              )}
+              {currentUser.role === UserRole.ADMIN && (
+                <button 
+                  onClick={() => setView('ADMIN')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'ADMIN' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:text-green-600'}`}
+                >
+                  Admin Panel
+                </button>
+              )}
                <button 
                   onClick={() => setView('MARKETPLACE')}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'MARKETPLACE' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:text-green-600'}`}
@@ -366,30 +424,27 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Demo User Switcher */}
+            <button onClick={() => setView('MESSAGES')} className="relative p-2 text-gray-600 hover:text-green-600 transition-colors">
+              <MessageCircle className="w-6 h-6" />
+              {messages.some(m => m.receiverId === currentUser.id) && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>}
+            </button>
+            
+            {/* User Switcher for Demo */}
             <select 
-              className="text-xs border border-gray-200 rounded p-1"
+              className="text-xs border p-1 rounded"
               value={currentUser.id}
               onChange={(e) => {
                 const user = users.find(u => u.id === e.target.value);
-                if (user) {
-                  setCurrentUser(user);
-                  setView(user.role === UserRole.ADMIN ? 'ADMIN' : (user.role === UserRole.PRODUCER ? 'DASHBOARD' : 'MARKETPLACE'));
-                }
+                if(user) setCurrentUser(user);
+                setView('MARKETPLACE'); // Reset view on switch
               }}
             >
               {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
             </select>
 
-            <button onClick={() => setView('MESSAGES')} className="relative p-2 text-gray-600 hover:text-green-600 transition-colors">
-              <MessageCircle className="w-6 h-6" />
-              {messages.some(m => m.receiverId === currentUser.id) && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>}
+            <button onClick={() => setView('MARKETPLACE')} className="text-gray-500 hover:text-red-500" title="Logout (Demo Reset)">
+               <LogOut className="w-5 h-5"/>
             </button>
-            <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded-full pr-3 transition-colors">
-               <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold overflow-hidden">
-                 {currentUser.avatarUrl ? <img src={currentUser.avatarUrl} alt="" className="w-full h-full object-cover"/> : currentUser.name[0]}
-               </div>
-            </div>
           </div>
         </div>
       </header>
@@ -397,59 +452,104 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
+        {/* ADMIN DASHBOARD */}
         {view === 'ADMIN' && currentUser.role === UserRole.ADMIN && (
-          <div className="animate-fadeIn">
-            <h1 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-              <Shield className="w-8 h-8 text-blue-600" /> Admin Dashboard
-            </h1>
-            
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-6 border-b border-gray-100">
-                <h2 className="text-lg font-bold text-gray-800">Pending Approvals</h2>
-                <p className="text-sm text-gray-500">Review producer verification requests.</p>
-              </div>
-              
-              {pendingUsers.length === 0 ? (
-                <div className="p-12 text-center text-gray-500">
-                  <UserCheck className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>No pending approvals at this time.</p>
+           <div className="animate-fadeIn space-y-8">
+             <div className="flex justify-between items-center">
+                <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+                <span className="text-sm text-gray-500">Platform Overview</span>
+             </div>
+
+             {/* Analytics */}
+             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                   <div className="flex justify-between items-start mb-4">
+                      <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><TrendingUp size={24}/></div>
+                      <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">+12%</span>
+                   </div>
+                   <p className="text-gray-500 text-sm">Total Revenue</p>
+                   <p className="text-2xl font-bold text-gray-900">$24,500</p>
                 </div>
-              ) : (
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                   <div className="flex justify-between items-start mb-4">
+                      <div className="p-2 bg-purple-100 rounded-lg text-purple-600"><Package size={24}/></div>
+                      <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">+5%</span>
+                   </div>
+                   <p className="text-gray-500 text-sm">Total Orders</p>
+                   <p className="text-2xl font-bold text-gray-900">1,254</p>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                   <div className="flex justify-between items-start mb-4">
+                      <div className="p-2 bg-orange-100 rounded-lg text-orange-600"><UserCheck size={24}/></div>
+                   </div>
+                   <p className="text-gray-500 text-sm">Active Producers</p>
+                   <p className="text-2xl font-bold text-gray-900">{users.filter(u => u.role === UserRole.PRODUCER && u.status === UserStatus.APPROVED).length}</p>
+                </div>
+             </div>
+
+             {/* Top Selling Products Chart Placeholder */}
+             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                   <BarChart3 className="w-5 h-5"/> Top Selling Products
+                </h3>
+                <div className="space-y-4">
+                   {[
+                      { name: 'Organic Strawberries', sales: 85, color: 'bg-red-500' },
+                      { name: 'Fresh Eggs', sales: 72, color: 'bg-yellow-500' },
+                      { name: 'Sourdough Bread', sales: 64, color: 'bg-orange-500' },
+                      { name: 'Kale Bunches', sales: 45, color: 'bg-green-600' }
+                   ].map((item, i) => (
+                      <div key={i}>
+                         <div className="flex justify-between text-sm mb-1">
+                            <span className="font-medium text-gray-700">{item.name}</span>
+                            <span className="text-gray-500">{item.sales} sold</span>
+                         </div>
+                         <div className="w-full bg-gray-100 rounded-full h-2.5">
+                            <div className="h-2.5 rounded-full" style={{ width: `${item.sales}%`, backgroundColor: i === 0 ? '#ef4444' : i === 1 ? '#eab308' : i === 2 ? '#f97316' : '#16a34a' }}></div>
+                         </div>
+                      </div>
+                   ))}
+                </div>
+             </div>
+
+             {/* Pending Approvals */}
+             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-6 border-b border-gray-200">
+                   <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-gray-500"/> Pending Approvals
+                   </h2>
+                </div>
                 <div className="divide-y divide-gray-100">
-                  {pendingUsers.map(user => (
-                    <div key={user.id} className="p-6 flex items-center justify-between hover:bg-gray-50">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-bold">
-                          {user.name[0]}
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-gray-900">{user.name}</h3>
-                          <p className="text-sm text-gray-500">{user.email} • {user.location}</p>
-                          {user.bio && <p className="text-sm text-gray-600 mt-1 italic">"{user.bio}"</p>}
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => handleAdminAction(user.id, 'REJECT')}
-                          className="px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium flex items-center gap-2"
-                        >
-                          <XCircle className="w-4 h-4" /> Reject
-                        </button>
-                        <button 
-                          onClick={() => handleAdminAction(user.id, 'APPROVE')}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-2 shadow-sm"
-                        >
-                          <Check className="w-4 h-4" /> Approve
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                   {users.filter(u => u.status === UserStatus.PENDING).length === 0 ? (
+                      <div className="p-8 text-center text-gray-500">No pending requests</div>
+                   ) : (
+                      users.filter(u => u.status === UserStatus.PENDING).map(u => (
+                         <div key={u.id} className="p-6 flex items-center justify-between hover:bg-gray-50">
+                            <div className="flex items-center gap-4">
+                               <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600">{u.name[0]}</div>
+                               <div>
+                                  <p className="font-medium text-gray-900">{u.name} <span className="text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600 ml-2">{u.role}</span></p>
+                                  <p className="text-sm text-gray-500">{u.email} • {u.location}</p>
+                                  {u.bio && <p className="text-xs text-gray-400 mt-1 max-w-md">{u.bio}</p>}
+                               </div>
+                            </div>
+                            <div className="flex gap-2">
+                               <button onClick={() => handleAdminAction(u.id, 'APPROVE')} className="p-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors" title="Approve">
+                                  <Check className="w-5 h-5"/>
+                               </button>
+                               <button onClick={() => handleAdminAction(u.id, 'REJECT')} className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors" title="Reject">
+                                  <XCircle className="w-5 h-5"/>
+                               </button>
+                            </div>
+                         </div>
+                      ))
+                   )}
                 </div>
-              )}
-            </div>
-          </div>
+             </div>
+           </div>
         )}
 
+        {/* PRODUCER DASHBOARD */}
         {view === 'DASHBOARD' && currentUser.role === UserRole.PRODUCER && (
           <div className="animate-fadeIn">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
@@ -473,14 +573,27 @@ const App: React.FC = () => {
                </div>
             </div>
 
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+                  <div className="p-3 bg-blue-100 text-blue-600 rounded-lg"><Store className="w-6 h-6"/></div>
+                  <div><p className="text-gray-500 text-sm">Active Products</p><p className="text-2xl font-bold text-gray-800">{myProducts.length}</p></div>
+               </div>
+               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+                  <div className="p-3 bg-purple-100 text-purple-600 rounded-lg"><Heart className="w-6 h-6"/></div>
+                  <div><p className="text-gray-500 text-sm">Total Favorites</p><p className="text-2xl font-bold text-gray-800">124</p></div>
+               </div>
+               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+                  <div className="p-3 bg-orange-100 text-orange-600 rounded-lg"><MessageCircle className="w-6 h-6"/></div>
+                  <div><p className="text-gray-500 text-sm">New Inquiries</p><p className="text-2xl font-bold text-gray-800">3</p></div>
+               </div>
+            </div>
+
             {dashboardView === 'CALENDAR' ? renderCalendar() : (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                  <div className="p-6 border-b border-gray-100 flex justify-between items-center">
                     <h2 className="text-lg font-bold text-gray-800">Product Inventory</h2>
-                    <button 
-                      onClick={() => setIsAddProductOpen(true)}
-                      className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors flex items-center gap-2"
-                    >
+                    <button onClick={() => setIsAddProductOpen(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors flex items-center gap-2">
                        <Plus className="w-4 h-4" /> Add Product
                     </button>
                  </div>
@@ -535,18 +648,60 @@ const App: React.FC = () => {
           </div>
         )}
         
+        {/* MARKETPLACE VIEW */}
         {view === 'MARKETPLACE' && (
           <>
             <div className="flex justify-between items-center mb-6">
               <h1 className="text-2xl font-bold text-gray-800">Marketplace</h1>
-              <button 
-                onClick={handleGenerateRecipe}
-                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
-                disabled={isRecipeLoading}
-              >
-                <Sparkles className="w-4 h-4" />
-                {isRecipeLoading ? 'Thinking...' : 'Inspire Me'}
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={handleGenerateRecipe}
+                  className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                  disabled={isRecipeLoading}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  {isRecipeLoading ? 'Thinking...' : 'Inspire Me'}
+                </button>
+              </div>
+            </div>
+
+            {/* Availability Filter Section */}
+            <div className="mb-6 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
+               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-sm font-medium text-gray-700">
+                     <input 
+                       type="checkbox" 
+                       checked={showAvailableOnly} 
+                       onChange={(e) => setShowAvailableOnly(e.target.checked)}
+                       className="w-4 h-4 text-green-600 rounded focus:ring-green-500 border-gray-300"
+                     />
+                     Filter Availability
+                  </label>
+
+                  {showAvailableOnly && (
+                     <div className="flex items-center gap-2 animate-fadeIn">
+                        <div className="flex items-center gap-2">
+                           <span className="text-xs text-gray-500">From:</span>
+                           <input 
+                              type="date" 
+                              value={filterStartDate}
+                              onChange={(e) => setFilterStartDate(e.target.value)}
+                              className="text-sm p-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500"
+                           />
+                        </div>
+                        <span className="text-gray-400 text-sm">→</span>
+                        <div className="flex items-center gap-2">
+                           <span className="text-xs text-gray-500">Until:</span>
+                           <input 
+                              type="date" 
+                              value={filterEndDate}
+                              onChange={(e) => setFilterEndDate(e.target.value)}
+                              className="text-sm p-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500"
+                           />
+                        </div>
+                     </div>
+                  )}
+               </div>
             </div>
 
             {/* AI Recipe Input Section */}
@@ -598,7 +753,8 @@ const App: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filteredProducts.map(product => {
-                const producer = users.find(u => u.id === product.producerId);
+                const producer = MOCK_USERS.find(u => u.id === product.producerId);
+                const pricePerLb = getPricePerLb(product.price, product.unit);
                 return (
                   <div key={product.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100 overflow-hidden group">
                     <div className="h-48 overflow-hidden relative">
@@ -610,8 +766,13 @@ const App: React.FC = () => {
                     
                     <div className="p-4">
                       <div className="flex justify-between items-start mb-2">
+                         <div className="flex flex-col">
+                           <span className="font-bold text-green-700">${product.price.toFixed(2)} <span className="text-gray-400 text-xs font-normal">/ {product.unit}</span></span>
+                           {pricePerLb && (
+                             <span className="text-[10px] text-gray-400 font-medium block">(${pricePerLb} / lb approx.)</span>
+                           )}
+                         </div>
                          <span className="px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-semibold uppercase tracking-wide rounded-full">{product.category}</span>
-                         <span className="font-bold text-green-700">${product.price.toFixed(2)} <span className="text-gray-400 text-xs font-normal">/ {product.unit}</span></span>
                       </div>
 
                       <h3 className="font-bold text-gray-900 mb-1 leading-tight group-hover:text-green-700 transition-colors">{product.name}</h3>
@@ -657,6 +818,7 @@ const App: React.FC = () => {
           </>
         )}
 
+        {/* MESSAGES VIEW */}
         {view === 'MESSAGES' && (
           <div className="h-[calc(100vh-140px)] animate-fadeIn">
              <ChatInterface 
@@ -664,259 +826,243 @@ const App: React.FC = () => {
                 users={users} 
                 messages={messages} 
                 onSendMessage={handleSendMessage}
-                initialSelectedUserId={selectedProducer?.id}
+                initialSelectedUserId={activeChatUserId}
              />
           </div>
         )}
+
       </main>
 
-      {/* Add Product Modal */}
-      {isAddProductOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fadeIn">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-modalPop">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-900">Add New Product</h2>
-              <button onClick={() => setIsAddProductOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="p-6 max-h-[80vh] overflow-y-auto">
-              <div className="space-y-4">
-                {/* Image Upload with Preview */}
-                <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-2">Product Image</label>
-                   <div className="flex items-center justify-center w-full">
-                      {newProdImage ? (
-                        <div className="relative w-full h-48 rounded-lg overflow-hidden group">
-                           <img src={newProdImage} alt="Preview" className="w-full h-full object-cover" />
-                           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button 
-                                onClick={() => setNewProdImage('')} 
-                                className="bg-white/90 text-red-600 px-3 py-1 rounded-full text-sm font-medium"
-                              >
-                                Remove
-                              </button>
-                           </div>
-                        </div>
-                      ) : (
-                        <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                <ImageIcon className="w-8 h-8 mb-4 text-gray-500" />
-                                <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Click to upload</span></p>
-                                <p className="text-xs text-gray-500">SVG, PNG, JPG or GIF (MAX. 5MB)</p>
-                            </div>
-                            <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-                        </label>
-                      )}
-                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
-                  <input 
-                    type="text" 
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-                    value={newProdName}
-                    onChange={(e) => setNewProdName(e.target.value)}
-                    placeholder="e.g. Organic Carrots"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                   <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
-                      <div className="relative">
-                         <span className="absolute left-3 top-2 text-gray-500">$</span>
-                         <input 
-                           type="number" 
-                           className="w-full pl-6 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-                           value={newProdPrice}
-                           onChange={(e) => setNewProdPrice(e.target.value)}
-                           placeholder="0.00"
-                         />
-                      </div>
-                   </div>
-                   <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-                      <select 
-                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white"
-                        value={newProdUnit}
-                        onChange={(e) => setNewProdUnit(e.target.value)}
-                      >
-                         {PRODUCT_UNITS.map(unit => (
-                           <option key={unit} value={unit}>{unit}</option>
-                         ))}
-                      </select>
-                   </div>
-                </div>
-
-                <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                   <textarea 
-                     className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none h-24"
-                     value={newProdDesc}
-                     onChange={(e) => setNewProdDesc(e.target.value)}
-                     placeholder="Describe your product..."
-                   />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                   <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Available From</label>
-                      <input 
-                        type="date"
-                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-                        value={newProdFrom}
-                        onChange={(e) => setNewProdFrom(e.target.value)}
-                      />
-                   </div>
-                   <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Available Until</label>
-                      <input 
-                        type="date"
-                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-                        value={newProdUntil}
-                        onChange={(e) => setNewProdUntil(e.target.value)}
-                      />
-                   </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
-               <button 
-                  onClick={() => setIsAddProductOpen(false)}
-                  className="px-4 py-2 text-gray-700 font-medium hover:bg-gray-100 rounded-lg"
-               >
-                  Cancel
-               </button>
-               <button 
-                  onClick={handleAddProduct}
-                  className="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm"
-               >
-                  Create Product
-               </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* --- MODALS --- */}
 
       {/* Producer Profile Modal */}
       {selectedProducer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fadeIn">
-           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden animate-modalPop max-h-[90vh] flex flex-col">
-              <div className="h-32 bg-green-600 relative">
-                 <button 
-                   onClick={() => setSelectedProducer(null)} 
-                   className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full hover:bg-black/40 transition-colors"
-                 >
-                    <X size={20} />
-                 </button>
-                 <div className="absolute -bottom-12 left-8">
-                    <div className="w-24 h-24 rounded-full border-4 border-white bg-white shadow-md overflow-hidden">
-                       <img src={selectedProducer.avatarUrl || `https://ui-avatars.com/api/?name=${selectedProducer.name}`} alt={selectedProducer.name} className="w-full h-full object-cover"/>
-                    </div>
-                 </div>
-              </div>
-              
-              <div className="pt-16 px-8 pb-6 overflow-y-auto flex-1">
-                 <div className="flex justify-between items-start mb-2">
-                    <div>
-                       <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                          {selectedProducer.name}
-                          {selectedProducer.status === UserStatus.APPROVED && <VerifiedBadge />}
-                       </h2>
-                       <p className="text-gray-500 flex items-center gap-1 text-sm"><Leaf className="w-3 h-3"/> {selectedProducer.role}</p>
-                       <p className="text-gray-500 text-sm">{selectedProducer.location}</p>
-                    </div>
-                    <div className="flex flex-col items-end">
-                       <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-lg border border-yellow-100">
-                          <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                          <span className="font-bold text-gray-900">{averageRating}</span>
-                          <span className="text-xs text-gray-400">({producerReviews.length})</span>
-                       </div>
-                    </div>
-                 </div>
-                 
-                 <p className="text-gray-700 my-4 bg-gray-50 p-4 rounded-lg border border-gray-100">"{selectedProducer.bio || 'No bio available.'}"</p>
-                 
-                 <div className="flex gap-3 mb-8 border-b border-gray-100 pb-6">
-                    <button 
-                       onClick={() => { setView('MESSAGES'); setSelectedProducer(null); }}
-                       className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
-                    >
-                       <MessageCircle className="w-4 h-4" /> Message Producer
-                    </button>
-                    {currentUser.role === UserRole.CONSUMER && (
-                      <button 
-                         onClick={() => setIsReviewFormOpen(!isReviewFormOpen)}
-                         className={`flex-1 border py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${isReviewFormOpen ? 'bg-gray-100 border-gray-300 text-gray-900' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
-                      >
-                         {isReviewFormOpen ? <XCircle className="w-4 h-4"/> : <Star className="w-4 h-4"/>}
-                         {isReviewFormOpen ? 'Cancel Review' : 'Write a Review'}
-                      </button>
-                    )}
-                 </div>
+         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-modalPop shadow-2xl">
+               <div className="h-32 bg-gradient-to-r from-green-600 to-emerald-600 relative">
+                  <button 
+                    onClick={() => { setSelectedProducer(null); setIsReviewFormOpen(false); }}
+                    className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 text-white rounded-full transition-colors"
+                  >
+                     <X size={20} />
+                  </button>
+               </div>
+               <div className="px-8 pb-8">
+                  <div className="flex justify-between items-end -mt-10 mb-6">
+                     <div className="flex items-end gap-4">
+                        <img 
+                           src={selectedProducer.avatarUrl || 'https://via.placeholder.com/100'} 
+                           alt={selectedProducer.name} 
+                           className="w-24 h-24 rounded-full border-4 border-white shadow-lg bg-white"
+                        />
+                        <div className="mb-2">
+                           <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                              {selectedProducer.name}
+                              {selectedProducer.status === UserStatus.APPROVED && <VerifiedBadge />}
+                           </h2>
+                           <p className="text-gray-500 flex items-center gap-1 text-sm">
+                              <span className="text-green-600">●</span> {selectedProducer.location}
+                           </p>
+                        </div>
+                     </div>
+                     <div className="flex flex-col items-end">
+                        <div className="flex items-center gap-1 text-yellow-400 mb-1">
+                           <Star className="fill-current w-5 h-5"/>
+                           <span className="text-gray-800 font-bold text-lg">{getProducerRating(selectedProducer.id).toFixed(1)}</span>
+                           <span className="text-gray-400 text-sm font-normal">({reviews.filter(r => r.producerId === selectedProducer.id).length})</span>
+                        </div>
+                     </div>
+                  </div>
 
-                 {isReviewFormOpen && (
-                    <div className="mb-8 bg-gray-50 p-4 rounded-xl border border-gray-200 animate-fadeIn">
-                       <h3 className="font-bold text-gray-800 mb-3">Rate your experience</h3>
-                       <div className="flex gap-2 mb-4">
-                          {[1, 2, 3, 4, 5].map(star => (
-                             <button 
-                               key={star} 
-                               onClick={() => setNewReviewRating(star)}
-                               className="hover:scale-110 transition-transform"
-                             >
-                                <Star className={`w-8 h-8 ${star <= newReviewRating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
-                             </button>
-                          ))}
-                       </div>
-                       <textarea 
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none mb-3"
-                          rows={3}
-                          placeholder="Share your thoughts about this producer..."
-                          value={newReviewComment}
-                          onChange={(e) => setNewReviewComment(e.target.value)}
-                       />
-                       <div className="flex justify-end gap-2">
-                          <button onClick={() => setIsReviewFormOpen(false)} className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
-                          <button onClick={handleSubmitReview} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">Submit Review</button>
-                       </div>
-                    </div>
-                 )}
+                  <p className="text-gray-600 mb-6 leading-relaxed">{selectedProducer.bio || "No bio available."}</p>
 
-                 <div>
-                    <h3 className="font-bold text-gray-900 mb-4 text-lg">Reviews</h3>
-                    {producerReviews.length > 0 ? (
-                       <div className="space-y-4">
-                          {producerReviews.map(review => (
-                             <div key={review.id} className="border-b border-gray-100 last:border-0 pb-4 last:pb-0">
-                                <div className="flex justify-between mb-1">
-                                   <span className="font-medium text-gray-900">{review.userName}</span>
-                                   <div className="flex items-center gap-0.5">
-                                      {Array.from({length: 5}).map((_, i) => (
-                                         <Star key={i} className={`w-3 h-3 ${i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'}`} />
-                                      ))}
-                                   </div>
-                                </div>
-                                <p className="text-gray-600 text-sm leading-relaxed">{review.comment}</p>
-                                <p className="text-xs text-gray-400 mt-1">{new Date(review.timestamp).toLocaleDateString()}</p>
-                             </div>
-                          ))}
-                       </div>
-                    ) : (
-                       <div className="text-center py-8 bg-gray-50 rounded-lg text-gray-500 text-sm">
-                          No reviews yet. Be the first to review!
-                       </div>
-                    )}
-                 </div>
-              </div>
-           </div>
-        </div>
+                  <div className="flex gap-4 mb-8">
+                     <button 
+                        onClick={() => { 
+                           setActiveChatUserId(selectedProducer.id); 
+                           setView('MESSAGES'); 
+                           setSelectedProducer(null); 
+                        }}
+                        className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                     >
+                        <MessageCircle className="w-4 h-4" /> Contact Producer
+                     </button>
+                     
+                     {currentUser.role === UserRole.CONSUMER && (
+                       <button 
+                          onClick={() => setIsReviewFormOpen(!isReviewFormOpen)}
+                          className={`flex-1 px-6 py-2.5 rounded-lg font-medium transition-colors border flex items-center justify-center gap-2 ${isReviewFormOpen ? 'bg-gray-100 text-gray-700 border-gray-300' : 'bg-white text-green-700 border-green-200 hover:bg-green-50'}`}
+                       >
+                          {isReviewFormOpen ? <X size={18}/> : <PenLine size={18}/>}
+                          {isReviewFormOpen ? 'Cancel Review' : 'Write a Review'}
+                       </button>
+                     )}
+                  </div>
+
+                  {/* Review Form */}
+                  {isReviewFormOpen && (
+                     <div className="mb-8 bg-gray-50 p-6 rounded-xl border border-gray-100 animate-fadeIn">
+                        <h3 className="font-semibold text-gray-900 mb-4">Share your experience</h3>
+                        <div className="flex gap-2 mb-4">
+                           {[1, 2, 3, 4, 5].map(star => (
+                              <button 
+                                key={star}
+                                onClick={() => setNewReviewRating(star)}
+                                className={`transition-transform hover:scale-110 ${star <= newReviewRating ? 'text-yellow-400' : 'text-gray-300'}`}
+                              >
+                                 <Star className="fill-current w-8 h-8"/>
+                              </button>
+                           ))}
+                        </div>
+                        <textarea 
+                           className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none mb-2 min-h-[100px]"
+                           placeholder="What did you think about their products?"
+                           value={newReviewComment}
+                           onChange={(e) => setNewReviewComment(e.target.value)}
+                        />
+                        <div className="flex justify-between items-center">
+                           <span className="text-xs text-gray-400">Your review will be posted publicly.</span>
+                           <button 
+                              onClick={handleSubmitReview}
+                              disabled={!newReviewComment.trim()}
+                              className="bg-green-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                           >
+                              Submit Review
+                           </button>
+                        </div>
+                     </div>
+                  )}
+
+                  {/* Reviews List */}
+                  <div>
+                     <h3 className="font-bold text-gray-900 mb-4">Recent Reviews</h3>
+                     <div className="space-y-4">
+                        {reviews.filter(r => r.producerId === selectedProducer.id).map(review => (
+                           <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0">
+                              <div className="flex justify-between items-start mb-2">
+                                 <span className="font-semibold text-gray-900">{review.userName}</span>
+                                 <div className="flex items-center gap-1 text-yellow-400 text-xs">
+                                    <Star className="fill-current w-3 h-3"/> {review.rating}
+                                 </div>
+                              </div>
+                              <p className="text-gray-600 text-sm">{review.comment}</p>
+                              <p className="text-gray-400 text-xs mt-1">{new Date(review.timestamp).toLocaleDateString()}</p>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
       )}
 
+      {/* Add Product Modal */}
+      {isAddProductOpen && (
+         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-white rounded-2xl w-full max-w-lg animate-modalPop shadow-2xl">
+               <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-gray-900">Add New Product</h2>
+                  <button onClick={() => setIsAddProductOpen(false)} className="text-gray-400 hover:text-gray-600">
+                     <X size={24} />
+                  </button>
+               </div>
+               <div className="p-6 space-y-4">
+                  
+                  {/* Image Upload with Preview */}
+                  <div className="space-y-2">
+                     <label className="block text-sm font-medium text-gray-700">Product Image</label>
+                     <div className="flex items-center justify-center w-full">
+                        {newProdImage ? (
+                           <div className="relative w-full h-48 rounded-lg overflow-hidden group">
+                              <img src={newProdImage} alt="Preview" className="w-full h-full object-cover" />
+                              <button 
+                                onClick={() => setNewProdImage('')}
+                                className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                              >
+                                 <XCircle className="w-8 h-8"/>
+                              </button>
+                           </div>
+                        ) : (
+                           <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                              <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                 <ImageIcon className="w-8 h-8 text-gray-400 mb-2" />
+                                 <p className="text-sm text-gray-500 font-medium">Click to upload product photo</p>
+                                 <p className="text-xs text-gray-400 mt-1">SVG, PNG, JPG (Max 5MB)</p>
+                              </div>
+                              <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                           </label>
+                        )}
+                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                        <input className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdName} onChange={e => setNewProdName(e.target.value)} />
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                        <select className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdCategory} onChange={e => setNewProdCategory(e.target.value)}>
+                           <option>Vegetables</option>
+                           <option>Fruits</option>
+                           <option>Herbs</option>
+                           <option>Dairy</option>
+                           <option>Greens</option>
+                        </select>
+                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+                        <div className="relative">
+                           <span className="absolute left-3 top-2 text-gray-500">$</span>
+                           <input type="number" step="0.01" className="w-full pl-6 p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdPrice} onChange={e => setNewProdPrice(e.target.value)} />
+                        </div>
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                        <select className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdUnit} onChange={e => setNewProdUnit(e.target.value)}>
+                           {PRODUCT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                     </div>
+                  </div>
+
+                  <div>
+                     <div className="flex justify-between items-center mb-1">
+                        <label className="block text-sm font-medium text-gray-700">Description</label>
+                        <button 
+                           onClick={handleAiDescription}
+                           disabled={isGeneratingDesc || !newProdName}
+                           className="text-xs flex items-center gap-1 text-purple-600 hover:text-purple-700 disabled:opacity-50"
+                        >
+                           <Sparkles size={12}/> {isGeneratingDesc ? 'Generating...' : 'Auto-Generate'}
+                        </button>
+                     </div>
+                     <textarea className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500 h-24" value={newProdDesc} onChange={e => setNewProdDesc(e.target.value)} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Available From</label>
+                        <input type="date" className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdFrom} onChange={e => setNewProdFrom(e.target.value)} />
+                     </div>
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Available Until</label>
+                        <input type="date" className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdUntil} onChange={e => setNewProdUntil(e.target.value)} />
+                     </div>
+                  </div>
+
+                  <button 
+                     onClick={handleAddProduct}
+                     className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-colors mt-4"
+                  >
+                     Add Product
+                  </button>
+               </div>
+            </div>
+         </div>
+      )}
     </div>
   );
 };
