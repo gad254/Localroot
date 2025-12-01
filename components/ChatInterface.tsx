@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Message } from '../types';
 import { Send, User as UserIcon } from 'lucide-react';
@@ -8,9 +9,10 @@ interface ChatInterfaceProps {
   messages: Message[];
   onSendMessage: (receiverId: string, content: string) => void;
   initialSelectedUserId?: string | null;
+  translations: any;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ currentUser, users, messages, onSendMessage, initialSelectedUserId }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ currentUser, users, messages, onSendMessage, initialSelectedUserId, translations }) => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(initialSelectedUserId || null);
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -49,7 +51,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ currentUser, users, messa
       {/* Sidebar Contacts */}
       <div className="w-1/3 border-r border-gray-200 bg-gray-50 overflow-y-auto">
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-800">Messages</h2>
+          <h2 className="text-lg font-semibold text-gray-800">{translations.messages}</h2>
         </div>
         <ul>
           {contacts.map(contact => (
@@ -58,18 +60,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ currentUser, users, messa
               onClick={() => setSelectedUserId(contact.id)}
               className={`p-4 flex items-center cursor-pointer hover:bg-leaf-50 transition-colors ${selectedUserId === contact.id ? 'bg-leaf-100' : ''}`}
             >
-              <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden mr-3">
+              <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden mr-3 shrink-0">
                 {contact.avatarUrl ? <img src={contact.avatarUrl} alt={contact.name} className="w-full h-full object-cover"/> : <UserIcon className="text-gray-500 w-6 h-6" />}
               </div>
               <div>
                 <p className="font-medium text-gray-900">{contact.name}</p>
-                <p className="text-xs text-gray-500 capitalize">{contact.role.toLowerCase()}</p>
+                <p className="text-xs text-gray-500 capitalize">{translations.userRole[contact.role] || contact.role}</p>
               </div>
             </li>
           ))}
           {contacts.length === 0 && (
             <li className="p-8 text-center text-gray-500 text-sm">
-              No contacts yet. Start browsing to connect!
+              {translations.noContacts}
             </li>
           )}
         </ul>
@@ -103,7 +105,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ currentUser, users, messa
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Type a message..."
+                placeholder={translations.typeMessage}
                 className="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-leaf-500"
               />
               <button 
@@ -117,8 +119,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ currentUser, users, messa
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-400 bg-slate-50">
             <div className="text-center">
-              <p className="mb-2 text-xl">Select a conversation</p>
-              <p className="text-sm">Connect directly with your local food community.</p>
+              <p className="mb-2 text-xl">{translations.selectConversation}</p>
+              <p className="text-sm">{translations.connectCommunity}</p>
             </div>
           </div>
         )}

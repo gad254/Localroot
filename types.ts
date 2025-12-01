@@ -51,6 +51,7 @@ export interface Message {
 export interface Review {
   id: string;
   producerId: string;
+  productId?: string; // Optional: If present, review is for a specific product
   userId: string;
   userName: string;
   rating: number; // 1-5

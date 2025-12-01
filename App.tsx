@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   User, Product, ViewState, UserRole, UserStatus, Message, 
@@ -5,12 +6,13 @@ import {
 } from './types';
 import ChatInterface from './components/ChatInterface';
 import { generateProductDescription, suggestRecipe, smartSearch } from './services/geminiService';
+import { TRANSLATIONS, LANGUAGES, Language } from './translations';
 import { 
   ShoppingBasket, MessageCircle, Search, 
   Sparkles, Heart, X, Leaf, Calendar as CalendarIcon, 
   LayoutGrid, ChevronLeft, ChevronRight, Edit, Plus, Store, ChefHat, 
   Image as ImageIcon, Upload, Star, Check, XCircle, UserCheck, Shield, LogOut,
-  BadgeCheck, TrendingUp, DollarSign, Package, BarChart3, Mail, PenLine
+  BadgeCheck, TrendingUp, DollarSign, Package, BarChart3, Mail, PenLine, Globe, ArrowUpDown, Loader2
 } from 'lucide-react';
 
 // --- Mock Data ---
@@ -66,7 +68,8 @@ const MOCK_MESSAGES: Message[] = [
 
 const MOCK_REVIEWS: Review[] = [
   { id: 'r1', producerId: 'u1', userId: 'u2', userName: 'Alice Smith', rating: 5, comment: 'Amazing tomatoes! Tastes like summer.', timestamp: Date.now() - 86400000 },
-  { id: 'r2', producerId: 'u1', userId: 'u99', userName: 'John Doe', rating: 4, comment: 'Great quality, but parking was tricky.', timestamp: Date.now() - 172800000 }
+  { id: 'r2', producerId: 'u1', userId: 'u99', userName: 'John Doe', rating: 4, comment: 'Great quality, but parking was tricky.', timestamp: Date.now() - 172800000 },
+  { id: 'r3', producerId: 'u1', productId: 'p1', userId: 'u2', userName: 'Alice Smith', rating: 5, comment: 'These tomatoes are incredibly sweet.', timestamp: Date.now() - 4000000 }
 ];
 
 const PRODUCT_UNITS = ['lb', 'oz', 'kg', 'g', 'bunch', 'piece', 'box', 'dozen', 'pint', 'quart'];
@@ -100,8 +103,14 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
   const [reviews, setReviews] = useState<Review[]>(MOCK_REVIEWS);
   const [selectedProducer, setSelectedProducer] = useState<User | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [activeChatUserId, setActiveChatUserId] = useState<string | null>(null);
   
+  // Language State
+  const [language, setLanguage] = useState<Language>('en');
+  const t = TRANSLATIONS[language];
+  const isRtl = language === 'ar';
+
   // Recipe State
   const [aiRecipe, setAiRecipe] = useState<RecipeSuggestion | null>(null);
   const [isRecipeLoading, setIsRecipeLoading] = useState(false);
@@ -123,6 +132,9 @@ const App: React.FC = () => {
   const [newProdUntil, setNewProdUntil] = useState('');
   const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
 
+  // Loading state for individual products (enhancement)
+  const [loadingProducts, setLoadingProducts] = useState<Set<string>>(new Set());
+
   // Review State
   const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
   const [newReviewRating, setNewReviewRating] = useState(5);
@@ -132,11 +144,14 @@ const App: React.FC = () => {
   const [showAvailableOnly, setShowAvailableOnly] = useState(false);
   const [filterStartDate, setFilterStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterEndDate, setFilterEndDate] = useState('');
+  
+  // Sorting State
+  const [sortOption, setSortOption] = useState<'price_asc' | 'price_desc' | 'name' | 'date'>('date');
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
-    const keywords = await smartSearch(searchQuery);
+    const keywords = await smartSearch(searchQuery, language);
     console.log("AI suggested keywords:", keywords);
     // In a real app, we would use these keywords to refine the filter
   };
@@ -165,21 +180,39 @@ const App: React.FC = () => {
     }
 
     return matchesSearch && matchesAvailability;
+  }).sort((a, b) => {
+    switch (sortOption) {
+      case 'price_asc':
+        return a.price - b.price;
+      case 'price_desc':
+        return b.price - a.price;
+      case 'name':
+        return a.name.localeCompare(b.name);
+      case 'date':
+        // Sort by harvest date (using availableFrom as proxy) - newest first
+        const dateA = a.availableFrom ? new Date(a.availableFrom).getTime() : 0;
+        const dateB = b.availableFrom ? new Date(b.availableFrom).getTime() : 0;
+        return dateB - dateA;
+      default:
+        return 0;
+    }
   });
 
   const handleGenerateRecipe = async () => {
+    setAiRecipe(null);
     setIsRecipeLoading(true);
     // Use top product names for "Inspire Me"
     const ingredients = products.slice(0, 5).map(p => p.name).join(", ");
-    const recipe = await suggestRecipe(ingredients);
+    const recipe = await suggestRecipe(ingredients, language);
     setAiRecipe(recipe);
     setIsRecipeLoading(false);
   };
 
   const handlePantryRecipe = async () => {
     if (!pantryIngredients.trim()) return;
+    setAiRecipe(null);
     setIsRecipeLoading(true);
-    const recipe = await suggestRecipe(pantryIngredients);
+    const recipe = await suggestRecipe(pantryIngredients, language);
     setAiRecipe(recipe);
     setIsRecipeLoading(false);
   };
@@ -198,17 +231,32 @@ const App: React.FC = () => {
   const enhanceDescription = async (productId: string) => {
     const product = products.find(p => p.id === productId);
     if (!product) return;
-    const newDesc = await generateProductDescription(product.name, product.category);
-    setProducts(products.map(p => p.id === productId ? { ...p, description: newDesc } : p));
+    
+    setLoadingProducts(prev => {
+      const next = new Set(prev);
+      next.add(productId);
+      return next;
+    });
+
+    try {
+      const newDesc = await generateProductDescription(product.name, product.category, language);
+      setProducts(products.map(p => p.id === productId ? { ...p, description: newDesc } : p));
+    } finally {
+      setLoadingProducts(prev => {
+        const next = new Set(prev);
+        next.delete(productId);
+        return next;
+      });
+    }
   };
 
   const handleAiDescription = async () => {
     if (!newProdName || !newProdCategory) {
-      alert("Please enter a product name and category first.");
+      alert(t.enterProdName);
       return;
     }
     setIsGeneratingDesc(true);
-    const desc = await generateProductDescription(newProdName, newProdCategory);
+    const desc = await generateProductDescription(newProdName, newProdCategory, language);
     setNewProdDesc(desc);
     setIsGeneratingDesc(false);
   };
@@ -217,11 +265,11 @@ const App: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        alert("File size too large. Please select an image under 5MB.");
+        alert(t.fileTooLarge);
         return;
       }
       if (!file.type.startsWith('image/')) {
-        alert("Invalid file type. Please upload an image.");
+        alert(t.invalidFileType);
         return;
       }
       const reader = new FileReader();
@@ -268,10 +316,13 @@ const App: React.FC = () => {
   };
 
   const handleSubmitReview = () => {
-    if (!selectedProducer || !newReviewComment.trim()) return;
+    const targetProducerId = selectedProduct ? selectedProduct.producerId : selectedProducer?.id;
+    if (!targetProducerId || !newReviewComment.trim()) return;
+
     const newReview: Review = {
       id: Date.now().toString(),
-      producerId: selectedProducer.id,
+      producerId: targetProducerId,
+      productId: selectedProduct?.id, // Optional link to product
       userId: currentUser.id,
       userName: currentUser.name,
       rating: newReviewRating,
@@ -282,6 +333,7 @@ const App: React.FC = () => {
     setNewReviewComment('');
     setNewReviewRating(5);
     setIsReviewFormOpen(false);
+    alert(t.reviewSubmitted);
   };
 
   // Calendar Logic
@@ -306,7 +358,7 @@ const App: React.FC = () => {
     const firstDay = new Date(year, month, 1).getDay();
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     const blanks = Array.from({ length: firstDay }, (_, i) => i);
-    const monthName = calendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+    const monthName = calendarDate.toLocaleString(language === 'zh' ? 'zh-CN' : language === 'ar' ? 'ar-SA' : 'default', { month: 'long', year: 'numeric' });
 
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -324,7 +376,7 @@ const App: React.FC = () => {
            </div>
         </div>
         
-        <div className="grid grid-cols-7 border-b border-gray-200">
+        <div className="grid grid-cols-7 border-b border-gray-200" dir="ltr">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
             <div key={d} className="py-3 text-center text-xs font-bold text-gray-400 uppercase tracking-wider bg-white">
               {d}
@@ -332,7 +384,7 @@ const App: React.FC = () => {
           ))}
         </div>
 
-        <div className="grid grid-cols-7 auto-rows-[120px] bg-gray-100 gap-px border-b border-gray-200">
+        <div className="grid grid-cols-7 auto-rows-[120px] bg-gray-100 gap-px border-b border-gray-200" dir="ltr">
            {blanks.map((b) => <div key={`blank-${b}`} className="bg-white/50" />)}
            {days.map((day) => {
              const currentDate = new Date(year, month, day);
@@ -363,6 +415,12 @@ const App: React.FC = () => {
     return producerReviews.reduce((acc, r) => acc + r.rating, 0) / producerReviews.length;
   };
 
+  const getProductRating = (productId: string) => {
+    const productReviews = reviews.filter(r => r.productId === productId);
+    if (productReviews.length === 0) return 0;
+    return productReviews.reduce((acc, r) => acc + r.rating, 0) / productReviews.length;
+  };
+
   const getPricePerLb = (price: number, unit: string) => {
      if (unit === 'lb') return null;
      const factor = UNIT_TO_LBS[unit];
@@ -371,16 +429,16 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20">
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-4 md:gap-8">
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('MARKETPLACE')}>
                <div className="bg-green-600 p-2 rounded-lg">
                   <Leaf className="text-white w-6 h-6" />
                </div>
-               <span className="text-xl font-bold text-green-900">FarmConnect</span>
+               <span className="text-xl font-bold text-green-900 hidden sm:block">{t.appTitle}</span>
             </div>
 
             <nav className="hidden md:flex gap-4">
@@ -389,7 +447,7 @@ const App: React.FC = () => {
                   onClick={() => setView('DASHBOARD')}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'DASHBOARD' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:text-green-600'}`}
                 >
-                  Dashboard
+                  {t.dashboard}
                 </button>
               )}
               {currentUser.role === UserRole.ADMIN && (
@@ -397,14 +455,14 @@ const App: React.FC = () => {
                   onClick={() => setView('ADMIN')}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'ADMIN' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:text-green-600'}`}
                 >
-                  Admin Panel
+                  {t.adminPanel}
                 </button>
               )}
                <button 
                   onClick={() => setView('MARKETPLACE')}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${view === 'MARKETPLACE' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:text-green-600'}`}
                >
-                  Marketplace
+                  {t.marketplace}
                </button>
             </nav>
           </div>
@@ -413,17 +471,35 @@ const App: React.FC = () => {
             <div className="relative w-full">
               <input 
                 type="text" 
-                placeholder="Search fresh produce..." 
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
+                placeholder={t.searchPlaceholder} 
+                className={`w-full py-2 border border-gray-300 rounded-full focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'}`}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch(e)}
               />
-              <Search className="absolute left-3 top-2.5 text-gray-400 w-5 h-5" />
+              <Search className={`absolute top-2.5 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`} />
             </div>
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Language Selector */}
+            <div className="relative group">
+               <button className="flex items-center gap-1 text-gray-600 hover:text-green-600">
+                  <span className="text-xl">{LANGUAGES.find(l => l.code === language)?.flag}</span>
+               </button>
+               <div className={`absolute top-full mt-2 w-32 bg-white rounded-lg shadow-lg py-2 border border-gray-100 hidden group-hover:block z-50 ${isRtl ? 'left-0' : 'right-0'}`}>
+                  {LANGUAGES.map(lang => (
+                     <button
+                        key={lang.code}
+                        onClick={() => setLanguage(lang.code)}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${language === lang.code ? 'font-bold text-green-700' : 'text-gray-700'}`}
+                     >
+                        <span>{lang.flag}</span> {lang.name}
+                     </button>
+                  ))}
+               </div>
+            </div>
+
             <button onClick={() => setView('MESSAGES')} className="relative p-2 text-gray-600 hover:text-green-600 transition-colors">
               <MessageCircle className="w-6 h-6" />
               {messages.some(m => m.receiverId === currentUser.id) && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>}
@@ -431,7 +507,7 @@ const App: React.FC = () => {
             
             {/* User Switcher for Demo */}
             <select 
-              className="text-xs border p-1 rounded"
+              className="text-xs border p-1 rounded max-w-[100px]"
               value={currentUser.id}
               onChange={(e) => {
                 const user = users.find(u => u.id === e.target.value);
@@ -442,7 +518,7 @@ const App: React.FC = () => {
               {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
             </select>
 
-            <button onClick={() => setView('MARKETPLACE')} className="text-gray-500 hover:text-red-500" title="Logout (Demo Reset)">
+            <button onClick={() => setView('MARKETPLACE')} className="text-gray-500 hover:text-red-500" title={t.logout}>
                <LogOut className="w-5 h-5"/>
             </button>
           </div>
@@ -456,8 +532,8 @@ const App: React.FC = () => {
         {view === 'ADMIN' && currentUser.role === UserRole.ADMIN && (
            <div className="animate-fadeIn space-y-8">
              <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-                <span className="text-sm text-gray-500">Platform Overview</span>
+                <h1 className="text-2xl font-bold text-gray-900">{t.adminDashboard}</h1>
+                <span className="text-sm text-gray-500">{t.platformOverview}</span>
              </div>
 
              {/* Analytics */}
@@ -467,7 +543,7 @@ const App: React.FC = () => {
                       <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><TrendingUp size={24}/></div>
                       <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">+12%</span>
                    </div>
-                   <p className="text-gray-500 text-sm">Total Revenue</p>
+                   <p className="text-gray-500 text-sm">{t.totalRevenue}</p>
                    <p className="text-2xl font-bold text-gray-900">$24,500</p>
                 </div>
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -475,14 +551,14 @@ const App: React.FC = () => {
                       <div className="p-2 bg-purple-100 rounded-lg text-purple-600"><Package size={24}/></div>
                       <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">+5%</span>
                    </div>
-                   <p className="text-gray-500 text-sm">Total Orders</p>
+                   <p className="text-gray-500 text-sm">{t.totalOrders}</p>
                    <p className="text-2xl font-bold text-gray-900">1,254</p>
                 </div>
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                    <div className="flex justify-between items-start mb-4">
                       <div className="p-2 bg-orange-100 rounded-lg text-orange-600"><UserCheck size={24}/></div>
                    </div>
-                   <p className="text-gray-500 text-sm">Active Producers</p>
+                   <p className="text-gray-500 text-sm">{t.activeProducers}</p>
                    <p className="text-2xl font-bold text-gray-900">{users.filter(u => u.role === UserRole.PRODUCER && u.status === UserStatus.APPROVED).length}</p>
                 </div>
              </div>
@@ -490,7 +566,7 @@ const App: React.FC = () => {
              {/* Top Selling Products Chart Placeholder */}
              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                 <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                   <BarChart3 className="w-5 h-5"/> Top Selling Products
+                   <BarChart3 className="w-5 h-5"/> {t.topSelling}
                 </h3>
                 <div className="space-y-4">
                    {[
@@ -502,7 +578,7 @@ const App: React.FC = () => {
                       <div key={i}>
                          <div className="flex justify-between text-sm mb-1">
                             <span className="font-medium text-gray-700">{item.name}</span>
-                            <span className="text-gray-500">{item.sales} sold</span>
+                            <span className="text-gray-500">{item.sales} {t.sold}</span>
                          </div>
                          <div className="w-full bg-gray-100 rounded-full h-2.5">
                             <div className="h-2.5 rounded-full" style={{ width: `${item.sales}%`, backgroundColor: i === 0 ? '#ef4444' : i === 1 ? '#eab308' : i === 2 ? '#f97316' : '#16a34a' }}></div>
@@ -516,28 +592,28 @@ const App: React.FC = () => {
              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="p-6 border-b border-gray-200">
                    <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                      <Shield className="w-5 h-5 text-gray-500"/> Pending Approvals
+                      <Shield className="w-5 h-5 text-gray-500"/> {t.pendingApprovals}
                    </h2>
                 </div>
                 <div className="divide-y divide-gray-100">
                    {users.filter(u => u.status === UserStatus.PENDING).length === 0 ? (
-                      <div className="p-8 text-center text-gray-500">No pending requests</div>
+                      <div className="p-8 text-center text-gray-500">{t.noPendingRequests}</div>
                    ) : (
                       users.filter(u => u.status === UserStatus.PENDING).map(u => (
                          <div key={u.id} className="p-6 flex items-center justify-between hover:bg-gray-50">
                             <div className="flex items-center gap-4">
                                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600">{u.name[0]}</div>
                                <div>
-                                  <p className="font-medium text-gray-900">{u.name} <span className="text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600 ml-2">{u.role}</span></p>
+                                  <p className="font-medium text-gray-900">{u.name} <span className="text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600 ml-2">{t.userRole[u.role] || u.role}</span></p>
                                   <p className="text-sm text-gray-500">{u.email} • {u.location}</p>
                                   {u.bio && <p className="text-xs text-gray-400 mt-1 max-w-md">{u.bio}</p>}
                                </div>
                             </div>
                             <div className="flex gap-2">
-                               <button onClick={() => handleAdminAction(u.id, 'APPROVE')} className="p-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors" title="Approve">
+                               <button onClick={() => handleAdminAction(u.id, 'APPROVE')} className="p-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors" title={t.approve}>
                                   <Check className="w-5 h-5"/>
-                               </button>
-                               <button onClick={() => handleAdminAction(u.id, 'REJECT')} className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors" title="Reject">
+                                </button>
+                               <button onClick={() => handleAdminAction(u.id, 'REJECT')} className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors" title={t.reject}>
                                   <XCircle className="w-5 h-5"/>
                                </button>
                             </div>
@@ -554,21 +630,21 @@ const App: React.FC = () => {
           <div className="animate-fadeIn">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Producer Dashboard</h1>
-                  <p className="text-gray-500">Manage your farm's inventory and availability.</p>
+                  <h1 className="text-2xl font-bold text-gray-900">{t.producerDashboard}</h1>
+                  <p className="text-gray-500">{t.manageInventory}</p>
                </div>
                <div className="flex bg-white rounded-lg shadow-sm border border-gray-200 p-1">
                   <button 
                     onClick={() => setDashboardView('LIST')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${dashboardView === 'LIST' ? 'bg-green-100 text-green-800 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}
                   >
-                    <LayoutGrid className="w-4 h-4" /> List
+                    <LayoutGrid className="w-4 h-4" /> {t.list}
                   </button>
                   <button 
                     onClick={() => setDashboardView('CALENDAR')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${dashboardView === 'CALENDAR' ? 'bg-green-100 text-green-800 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}
                   >
-                    <CalendarIcon className="w-4 h-4" /> Calendar
+                    <CalendarIcon className="w-4 h-4" /> {t.calendar}
                   </button>
                </div>
             </div>
@@ -577,33 +653,33 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
                   <div className="p-3 bg-blue-100 text-blue-600 rounded-lg"><Store className="w-6 h-6"/></div>
-                  <div><p className="text-gray-500 text-sm">Active Products</p><p className="text-2xl font-bold text-gray-800">{myProducts.length}</p></div>
+                  <div><p className="text-gray-500 text-sm">{t.activeProducts}</p><p className="text-2xl font-bold text-gray-800">{myProducts.length}</p></div>
                </div>
                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
                   <div className="p-3 bg-purple-100 text-purple-600 rounded-lg"><Heart className="w-6 h-6"/></div>
-                  <div><p className="text-gray-500 text-sm">Total Favorites</p><p className="text-2xl font-bold text-gray-800">124</p></div>
+                  <div><p className="text-gray-500 text-sm">{t.totalFavorites}</p><p className="text-2xl font-bold text-gray-800">124</p></div>
                </div>
                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
                   <div className="p-3 bg-orange-100 text-orange-600 rounded-lg"><MessageCircle className="w-6 h-6"/></div>
-                  <div><p className="text-gray-500 text-sm">New Inquiries</p><p className="text-2xl font-bold text-gray-800">3</p></div>
+                  <div><p className="text-gray-500 text-sm">{t.newInquiries}</p><p className="text-2xl font-bold text-gray-800">3</p></div>
                </div>
             </div>
 
             {dashboardView === 'CALENDAR' ? renderCalendar() : (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                  <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-gray-800">Product Inventory</h2>
+                    <h2 className="text-lg font-bold text-gray-800">{t.productInventory}</h2>
                     <button onClick={() => setIsAddProductOpen(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors flex items-center gap-2">
-                       <Plus className="w-4 h-4" /> Add Product
+                       <Plus className="w-4 h-4" /> {t.addProduct}
                     </button>
                  </div>
                  <table className="w-full text-left">
                     <thead className="bg-gray-50 border-b border-gray-200">
                        <tr>
-                          <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Product</th>
-                          <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Price</th>
-                          <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Availability</th>
-                          <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                          <th className={`px-6 py-3 text-xs font-semibold text-gray-500 uppercase ${isRtl ? 'text-right' : 'text-left'}`}>{t.product}</th>
+                          <th className={`px-6 py-3 text-xs font-semibold text-gray-500 uppercase ${isRtl ? 'text-right' : 'text-left'}`}>{t.price}</th>
+                          <th className={`px-6 py-3 text-xs font-semibold text-gray-500 uppercase ${isRtl ? 'text-right' : 'text-left'}`}>{t.availability}</th>
+                          <th className={`px-6 py-3 text-xs font-semibold text-gray-500 uppercase ${isRtl ? 'text-right' : 'text-left'}`}>{t.actions}</th>
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -652,55 +728,74 @@ const App: React.FC = () => {
         {view === 'MARKETPLACE' && (
           <>
             <div className="flex justify-between items-center mb-6">
-              <h1 className="text-2xl font-bold text-gray-800">Marketplace</h1>
+              <h1 className="text-2xl font-bold text-gray-800">{t.marketplace}</h1>
               <div className="flex gap-2">
                 <button 
                   onClick={handleGenerateRecipe}
-                  className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                  className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-70 disabled:cursor-wait"
                   disabled={isRecipeLoading}
                 >
                   <Sparkles className="w-4 h-4" />
-                  {isRecipeLoading ? 'Thinking...' : 'Inspire Me'}
+                  {isRecipeLoading ? t.thinking : t.inspireMe}
                 </button>
               </div>
             </div>
 
-            {/* Availability Filter Section */}
+            {/* Filter & Sort Section */}
             <div className="mb-6 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
-               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-sm font-medium text-gray-700">
-                     <input 
-                       type="checkbox" 
-                       checked={showAvailableOnly} 
-                       onChange={(e) => setShowAvailableOnly(e.target.checked)}
-                       className="w-4 h-4 text-green-600 rounded focus:ring-green-500 border-gray-300"
-                     />
-                     Filter Availability
-                  </label>
+               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  
+                  {/* Filter Group */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer select-none text-sm font-medium text-gray-700">
+                      <input 
+                        type="checkbox" 
+                        checked={showAvailableOnly} 
+                        onChange={(e) => setShowAvailableOnly(e.target.checked)}
+                        className="w-4 h-4 text-green-600 rounded focus:ring-green-500 border-gray-300"
+                      />
+                      {t.filterAvailability}
+                    </label>
 
-                  {showAvailableOnly && (
-                     <div className="flex items-center gap-2 animate-fadeIn">
-                        <div className="flex items-center gap-2">
-                           <span className="text-xs text-gray-500">From:</span>
-                           <input 
-                              type="date" 
-                              value={filterStartDate}
-                              onChange={(e) => setFilterStartDate(e.target.value)}
-                              className="text-sm p-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500"
-                           />
-                        </div>
-                        <span className="text-gray-400 text-sm">→</span>
-                        <div className="flex items-center gap-2">
-                           <span className="text-xs text-gray-500">Until:</span>
-                           <input 
-                              type="date" 
-                              value={filterEndDate}
-                              onChange={(e) => setFilterEndDate(e.target.value)}
-                              className="text-sm p-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500"
-                           />
-                        </div>
-                     </div>
-                  )}
+                    {showAvailableOnly && (
+                      <div className="flex items-center gap-2 animate-fadeIn">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">{t.from}:</span>
+                            <input 
+                                type="date" 
+                                value={filterStartDate}
+                                onChange={(e) => setFilterStartDate(e.target.value)}
+                                className="text-sm p-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500"
+                            />
+                          </div>
+                          <span className="text-gray-400 text-sm">→</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">{t.until}:</span>
+                            <input 
+                                type="date" 
+                                value={filterEndDate}
+                                onChange={(e) => setFilterEndDate(e.target.value)}
+                                className="text-sm p-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500"
+                            />
+                          </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sort Group */}
+                  <div className="flex items-center gap-2 w-full md:w-auto">
+                     <span className="text-sm text-gray-500 whitespace-nowrap"><ArrowUpDown className="inline w-3 h-3"/> {t.sortBy}:</span>
+                     <select 
+                       value={sortOption}
+                       onChange={(e) => setSortOption(e.target.value as any)}
+                       className="p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 bg-white flex-1 md:flex-none"
+                     >
+                       <option value="date">{t.sortDate}</option>
+                       <option value="price_asc">{t.sortPriceLowHigh}</option>
+                       <option value="price_desc">{t.sortPriceHighLow}</option>
+                       <option value="name">{t.sortName}</option>
+                     </select>
+                  </div>
                </div>
             </div>
 
@@ -709,28 +804,53 @@ const App: React.FC = () => {
               <div className="flex flex-col md:flex-row gap-4 items-end">
                 <div className="flex-1 w-full">
                   <label className="block text-sm font-semibold text-orange-900 mb-2 flex items-center gap-2">
-                    <ChefHat className="w-4 h-4" /> Fridge-to-Table
+                    <ChefHat className="w-4 h-4" /> {t.fridgeToTable}
                   </label>
                   <input 
                     type="text"
                     value={pantryIngredients}
                     onChange={(e) => setPantryIngredients(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handlePantryRecipe()}
-                    placeholder="Enter ingredients you have (e.g. carrots, eggs, flour)..."
+                    placeholder={t.enterIngredients}
                     className="w-full px-4 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none bg-white"
                   />
                 </div>
                 <button 
                   onClick={handlePantryRecipe}
                   disabled={!pantryIngredients.trim() || isRecipeLoading}
-                  className="px-6 py-2 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  className="px-6 py-2 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex items-center gap-2"
                 >
-                  {isRecipeLoading ? 'Cooking up ideas...' : 'Get Recipe'}
+                   {isRecipeLoading && <Loader2 className="w-4 h-4 animate-spin"/>}
+                   {isRecipeLoading ? t.cookingUp : t.getRecipe}
                 </button>
               </div>
             </div>
 
-            {aiRecipe && (
+            {isRecipeLoading && (
+               <div className="mb-8 p-6 bg-white rounded-xl border border-gray-100 shadow-sm animate-pulse">
+                  <div className="h-7 bg-gray-200 rounded w-1/3 mb-4"></div>
+                  <div className="grid md:grid-cols-2 gap-4">
+                     <div>
+                        <div className="h-5 bg-gray-200 rounded w-1/4 mb-3"></div>
+                        <div className="space-y-2">
+                           <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                           <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+                           <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                        </div>
+                     </div>
+                     <div>
+                        <div className="h-5 bg-gray-200 rounded w-1/4 mb-3"></div>
+                        <div className="space-y-2">
+                           <div className="h-4 bg-gray-200 rounded w-full"></div>
+                           <div className="h-4 bg-gray-200 rounded w-full"></div>
+                           <div className="h-4 bg-gray-200 rounded w-4/5"></div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            )}
+
+            {!isRecipeLoading && aiRecipe && (
               <div className="mb-8 p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100 animate-fadeIn shadow-sm">
                  <div className="flex justify-between items-start">
                     <h3 className="text-xl font-bold text-purple-900 mb-2">{aiRecipe.title}</h3>
@@ -738,13 +858,13 @@ const App: React.FC = () => {
                  </div>
                  <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <h4 className="font-semibold text-purple-800 mb-1">Ingredients</h4>
+                      <h4 className="font-semibold text-purple-800 mb-1">{t.ingredients}</h4>
                       <ul className="list-disc list-inside text-gray-700 text-sm">
                         {aiRecipe.ingredients.map((ing, i) => <li key={i}>{ing}</li>)}
                       </ul>
                     </div>
                     <div>
-                       <h4 className="font-semibold text-purple-800 mb-1">Instructions</h4>
+                       <h4 className="font-semibold text-purple-800 mb-1">{t.instructions}</h4>
                        <p className="text-gray-700 text-sm">{aiRecipe.instructions}</p>
                     </div>
                  </div>
@@ -755,13 +875,25 @@ const App: React.FC = () => {
               {filteredProducts.map(product => {
                 const producer = MOCK_USERS.find(u => u.id === product.producerId);
                 const pricePerLb = getPricePerLb(product.price, product.unit);
+                const isEnhancing = loadingProducts.has(product.id);
+                const productRating = getProductRating(product.id);
+                
                 return (
                   <div key={product.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100 overflow-hidden group">
-                    <div className="h-48 overflow-hidden relative">
+                    <div 
+                      className="h-48 overflow-hidden relative cursor-pointer"
+                      onClick={() => setSelectedProduct(product)}
+                    >
                        <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                       <button className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-full hover:text-red-500 transition-colors shadow-sm">
+                       <button className={`absolute top-2 p-1.5 bg-white/90 rounded-full hover:text-red-500 transition-colors shadow-sm ${isRtl ? 'left-2' : 'right-2'}`}>
                           <Heart className="w-4 h-4" />
                        </button>
+                       {productRating > 0 && (
+                          <div className={`absolute bottom-2 bg-white/90 px-2 py-0.5 rounded-full flex items-center gap-1 text-xs font-bold text-gray-700 shadow-sm ${isRtl ? 'left-2' : 'right-2'}`}>
+                             <Star className="w-3 h-3 text-yellow-400 fill-current" />
+                             {productRating.toFixed(1)}
+                          </div>
+                       )}
                     </div>
                     
                     <div className="p-4">
@@ -775,7 +907,12 @@ const App: React.FC = () => {
                          <span className="px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-semibold uppercase tracking-wide rounded-full">{product.category}</span>
                       </div>
 
-                      <h3 className="font-bold text-gray-900 mb-1 leading-tight group-hover:text-green-700 transition-colors">{product.name}</h3>
+                      <h3 
+                        className="font-bold text-gray-900 mb-1 leading-tight group-hover:text-green-700 transition-colors cursor-pointer"
+                        onClick={() => setSelectedProduct(product)}
+                      >
+                        {product.name}
+                      </h3>
                       
                       <div 
                         className="mb-3 cursor-pointer group/producer" 
@@ -792,22 +929,30 @@ const App: React.FC = () => {
 
                       {product.availableFrom && (
                         <p className="text-[10px] text-gray-400 mb-2">
-                           Harvested: {new Date(product.availableFrom).toLocaleDateString()}
+                           {t.harvested}: {new Date(product.availableFrom).toLocaleDateString()}
                         </p>
                       )}
 
-                      <p className="text-sm text-gray-600 mb-4 line-clamp-2 min-h-[40px]">{product.description}</p>
+                      {isEnhancing ? (
+                        <div className="space-y-2 mb-4 h-[40px] animate-pulse">
+                           <div className="h-3 bg-gray-200 rounded w-full"></div>
+                           <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-600 mb-4 line-clamp-2 min-h-[40px]">{product.description}</p>
+                      )}
                       
                       <div className="flex gap-2">
                         <button className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
-                           <ShoppingBasket className="w-4 h-4" /> Add
+                           <ShoppingBasket className="w-4 h-4" /> {t.add}
                         </button>
                         <button 
                           onClick={() => enhanceDescription(product.id)}
-                          className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
+                          disabled={isEnhancing}
+                          className={`p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors ${isEnhancing ? 'opacity-50 cursor-not-allowed' : ''}`}
                           title="Enhance with Gemini"
                         >
-                           <Sparkles className="w-4 h-4" />
+                           <Sparkles className={`w-4 h-4 ${isEnhancing ? 'animate-spin' : ''}`} />
                         </button>
                       </div>
                     </div>
@@ -827,6 +972,7 @@ const App: React.FC = () => {
                 messages={messages} 
                 onSendMessage={handleSendMessage}
                 initialSelectedUserId={activeChatUserId}
+                translations={t}
              />
           </div>
         )}
@@ -835,6 +981,120 @@ const App: React.FC = () => {
 
       {/* --- MODALS --- */}
 
+      {/* Product Detail Modal */}
+      {selectedProduct && (
+         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-modalPop shadow-2xl flex flex-col md:flex-row overflow-hidden">
+               <button 
+                  onClick={() => { setSelectedProduct(null); setIsReviewFormOpen(false); }}
+                  className={`absolute top-4 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full transition-colors z-10 ${isRtl ? 'left-4' : 'right-4'}`}
+               >
+                  <X size={20} />
+               </button>
+               
+               {/* Product Image Side */}
+               <div className="w-full md:w-1/2 h-64 md:h-auto bg-gray-100 relative">
+                  <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-full h-full object-cover" />
+               </div>
+
+               {/* Product Info Side */}
+               <div className="w-full md:w-1/2 p-8 flex flex-col h-full overflow-y-auto">
+                  <div className="mb-6">
+                     <span className="text-sm font-semibold text-green-600 uppercase tracking-wide mb-1 block">{selectedProduct.category}</span>
+                     <h2 className="text-3xl font-bold text-gray-900 mb-2">{selectedProduct.name}</h2>
+                     
+                     <div className="flex items-center gap-2 mb-4">
+                        <span className="text-2xl font-bold text-gray-800">${selectedProduct.price.toFixed(2)}</span>
+                        <span className="text-gray-500">/ {selectedProduct.unit}</span>
+                        {getProductRating(selectedProduct.id) > 0 && (
+                          <div className="flex items-center gap-1 ml-4 bg-yellow-50 px-2 py-1 rounded-lg">
+                             <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                             <span className="font-bold text-gray-800">{getProductRating(selectedProduct.id).toFixed(1)}</span>
+                          </div>
+                        )}
+                     </div>
+
+                     <p className="text-gray-600 leading-relaxed mb-6">{selectedProduct.description}</p>
+                     
+                     {selectedProduct.availableFrom && (
+                       <div className="bg-green-50 p-3 rounded-lg flex items-center gap-2 text-sm text-green-800 mb-6">
+                          <CalendarIcon className="w-4 h-4" />
+                          <span>{t.availableFrom}: <strong>{new Date(selectedProduct.availableFrom).toLocaleDateString()}</strong></span>
+                       </div>
+                     )}
+
+                     <button className="w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 mb-8">
+                        <ShoppingBasket className="w-5 h-5" /> {t.add}
+                     </button>
+                  </div>
+
+                  {/* Product Reviews Section */}
+                  <div className="border-t border-gray-100 pt-6">
+                     <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-gray-900">{t.productReviews}</h3>
+                        {currentUser.role === UserRole.CONSUMER && (
+                          <button 
+                             onClick={() => setIsReviewFormOpen(!isReviewFormOpen)}
+                             className="text-sm text-green-600 font-medium hover:underline flex items-center gap-1"
+                          >
+                             {isReviewFormOpen ? t.cancelReview : t.rateProduct}
+                          </button>
+                        )}
+                     </div>
+
+                     {isReviewFormOpen && (
+                        <div className="mb-8 bg-gray-50 p-4 rounded-xl border border-gray-100 animate-fadeIn">
+                           <div className="flex gap-2 mb-3 justify-center">
+                              {[1, 2, 3, 4, 5].map(star => (
+                                 <button 
+                                   key={star}
+                                   onClick={() => setNewReviewRating(star)}
+                                   className={`transition-transform hover:scale-110 ${star <= newReviewRating ? 'text-yellow-400' : 'text-gray-300'}`}
+                                 >
+                                    <Star className="fill-current w-6 h-6"/>
+                                 </button>
+                              ))}
+                           </div>
+                           <textarea 
+                              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none mb-3 text-sm min-h-[80px]"
+                              placeholder={t.shareExperience}
+                              value={newReviewComment}
+                              onChange={(e) => setNewReviewComment(e.target.value)}
+                           />
+                           <button 
+                              onClick={() => handleSubmitReview()}
+                              disabled={!newReviewComment.trim()}
+                              className="w-full bg-green-600 text-white py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 text-sm"
+                           >
+                              {t.submitReview}
+                           </button>
+                        </div>
+                     )}
+
+                     <div className="space-y-4">
+                        {reviews.filter(r => r.productId === selectedProduct.id).length === 0 ? (
+                           <p className="text-center text-gray-500 py-4 italic">{t.noReviews}</p>
+                        ) : (
+                           reviews.filter(r => r.productId === selectedProduct.id).map(review => (
+                              <div key={review.id} className="bg-gray-50 p-4 rounded-xl">
+                                 <div className="flex justify-between items-start mb-2">
+                                    <span className="font-semibold text-gray-900 text-sm">{review.userName}</span>
+                                    <div className="flex items-center gap-1 text-yellow-400 text-xs">
+                                       <Star className="fill-current w-3 h-3"/> {review.rating}
+                                    </div>
+                                 </div>
+                                 <p className="text-gray-600 text-sm mb-1">{review.comment}</p>
+                                 <p className="text-gray-400 text-[10px]">{new Date(review.timestamp).toLocaleDateString()}</p>
+                              </div>
+                           ))
+                        )}
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
+      )}
+
       {/* Producer Profile Modal */}
       {selectedProducer && (
          <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-fadeIn">
@@ -842,7 +1102,7 @@ const App: React.FC = () => {
                <div className="h-32 bg-gradient-to-r from-green-600 to-emerald-600 relative">
                   <button 
                     onClick={() => { setSelectedProducer(null); setIsReviewFormOpen(false); }}
-                    className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 text-white rounded-full transition-colors"
+                    className={`absolute top-4 p-2 bg-white/20 hover:bg-white/30 text-white rounded-full transition-colors ${isRtl ? 'left-4' : 'right-4'}`}
                   >
                      <X size={20} />
                   </button>
@@ -874,7 +1134,7 @@ const App: React.FC = () => {
                      </div>
                   </div>
 
-                  <p className="text-gray-600 mb-6 leading-relaxed">{selectedProducer.bio || "No bio available."}</p>
+                  <p className="text-gray-600 mb-6 leading-relaxed">{selectedProducer.bio || t.noBio}</p>
 
                   <div className="flex gap-4 mb-8">
                      <button 
@@ -885,7 +1145,7 @@ const App: React.FC = () => {
                         }}
                         className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
                      >
-                        <MessageCircle className="w-4 h-4" /> Contact Producer
+                        <MessageCircle className="w-4 h-4" /> {t.contactProducer}
                      </button>
                      
                      {currentUser.role === UserRole.CONSUMER && (
@@ -894,7 +1154,7 @@ const App: React.FC = () => {
                           className={`flex-1 px-6 py-2.5 rounded-lg font-medium transition-colors border flex items-center justify-center gap-2 ${isReviewFormOpen ? 'bg-gray-100 text-gray-700 border-gray-300' : 'bg-white text-green-700 border-green-200 hover:bg-green-50'}`}
                        >
                           {isReviewFormOpen ? <X size={18}/> : <PenLine size={18}/>}
-                          {isReviewFormOpen ? 'Cancel Review' : 'Write a Review'}
+                          {isReviewFormOpen ? t.cancelReview : t.writeReview}
                        </button>
                      )}
                   </div>
@@ -902,7 +1162,7 @@ const App: React.FC = () => {
                   {/* Review Form */}
                   {isReviewFormOpen && (
                      <div className="mb-8 bg-gray-50 p-6 rounded-xl border border-gray-100 animate-fadeIn">
-                        <h3 className="font-semibold text-gray-900 mb-4">Share your experience</h3>
+                        <h3 className="font-semibold text-gray-900 mb-4">{t.shareExperience}</h3>
                         <div className="flex gap-2 mb-4">
                            {[1, 2, 3, 4, 5].map(star => (
                               <button 
@@ -921,13 +1181,13 @@ const App: React.FC = () => {
                            onChange={(e) => setNewReviewComment(e.target.value)}
                         />
                         <div className="flex justify-between items-center">
-                           <span className="text-xs text-gray-400">Your review will be posted publicly.</span>
+                           <span className="text-xs text-gray-400">{t.yourReviewPublic}</span>
                            <button 
-                              onClick={handleSubmitReview}
+                              onClick={() => handleSubmitReview()}
                               disabled={!newReviewComment.trim()}
                               className="bg-green-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                            >
-                              Submit Review
+                              {t.submitReview}
                            </button>
                         </div>
                      </div>
@@ -935,7 +1195,7 @@ const App: React.FC = () => {
 
                   {/* Reviews List */}
                   <div>
-                     <h3 className="font-bold text-gray-900 mb-4">Recent Reviews</h3>
+                     <h3 className="font-bold text-gray-900 mb-4">{t.recentReviews}</h3>
                      <div className="space-y-4">
                         {reviews.filter(r => r.producerId === selectedProducer.id).map(review => (
                            <div key={review.id} className="border-b border-gray-100 pb-4 last:border-0">
@@ -961,7 +1221,7 @@ const App: React.FC = () => {
          <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-fadeIn">
             <div className="bg-white rounded-2xl w-full max-w-lg animate-modalPop shadow-2xl">
                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                  <h2 className="text-xl font-bold text-gray-900">Add New Product</h2>
+                  <h2 className="text-xl font-bold text-gray-900">{t.addProduct}</h2>
                   <button onClick={() => setIsAddProductOpen(false)} className="text-gray-400 hover:text-gray-600">
                      <X size={24} />
                   </button>
@@ -970,7 +1230,7 @@ const App: React.FC = () => {
                   
                   {/* Image Upload with Preview */}
                   <div className="space-y-2">
-                     <label className="block text-sm font-medium text-gray-700">Product Image</label>
+                     <label className="block text-sm font-medium text-gray-700">{t.productImage}</label>
                      <div className="flex items-center justify-center w-full">
                         {newProdImage ? (
                            <div className="relative w-full h-48 rounded-lg overflow-hidden group">
@@ -986,8 +1246,8 @@ const App: React.FC = () => {
                            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
                               <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                  <ImageIcon className="w-8 h-8 text-gray-400 mb-2" />
-                                 <p className="text-sm text-gray-500 font-medium">Click to upload product photo</p>
-                                 <p className="text-xs text-gray-400 mt-1">SVG, PNG, JPG (Max 5MB)</p>
+                                 <p className="text-sm text-gray-500 font-medium">{t.uploadPhoto}</p>
+                                 <p className="text-xs text-gray-400 mt-1">{t.photoConstraints}</p>
                               </div>
                               <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
                            </label>
@@ -997,11 +1257,11 @@ const App: React.FC = () => {
 
                   <div className="grid grid-cols-2 gap-4">
                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t.name}</label>
                         <input className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdName} onChange={e => setNewProdName(e.target.value)} />
                      </div>
                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t.category}</label>
                         <select className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdCategory} onChange={e => setNewProdCategory(e.target.value)}>
                            <option>Vegetables</option>
                            <option>Fruits</option>
@@ -1014,14 +1274,14 @@ const App: React.FC = () => {
 
                   <div className="grid grid-cols-2 gap-4">
                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t.price}</label>
                         <div className="relative">
-                           <span className="absolute left-3 top-2 text-gray-500">$</span>
-                           <input type="number" step="0.01" className="w-full pl-6 p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdPrice} onChange={e => setNewProdPrice(e.target.value)} />
+                           <span className={`absolute top-2 text-gray-500 ${isRtl ? 'right-3' : 'left-3'}`}>$</span>
+                           <input type="number" step="0.01" className={`w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500 ${isRtl ? 'pr-6' : 'pl-6'}`} value={newProdPrice} onChange={e => setNewProdPrice(e.target.value)} />
                         </div>
                      </div>
                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t.unit}</label>
                         <select className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdUnit} onChange={e => setNewProdUnit(e.target.value)}>
                            {PRODUCT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
@@ -1030,25 +1290,33 @@ const App: React.FC = () => {
 
                   <div>
                      <div className="flex justify-between items-center mb-1">
-                        <label className="block text-sm font-medium text-gray-700">Description</label>
+                        <label className="block text-sm font-medium text-gray-700">{t.description}</label>
                         <button 
                            onClick={handleAiDescription}
                            disabled={isGeneratingDesc || !newProdName}
                            className="text-xs flex items-center gap-1 text-purple-600 hover:text-purple-700 disabled:opacity-50"
                         >
-                           <Sparkles size={12}/> {isGeneratingDesc ? 'Generating...' : 'Auto-Generate'}
+                           <Sparkles size={12} className={isGeneratingDesc ? 'animate-spin' : ''}/> {isGeneratingDesc ? t.generating : t.autoGenerate}
                         </button>
                      </div>
-                     <textarea className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500 h-24" value={newProdDesc} onChange={e => setNewProdDesc(e.target.value)} />
+                     {isGeneratingDesc ? (
+                        <div className="w-full h-24 p-3 border border-gray-200 rounded-lg bg-gray-50 animate-pulse">
+                           <div className="h-3 bg-gray-200 rounded w-3/4 mb-2"></div>
+                           <div className="h-3 bg-gray-200 rounded w-full mb-2"></div>
+                           <div className="h-3 bg-gray-200 rounded w-5/6"></div>
+                        </div>
+                     ) : (
+                        <textarea className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500 h-24" value={newProdDesc} onChange={e => setNewProdDesc(e.target.value)} />
+                     )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Available From</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t.availableFrom}</label>
                         <input type="date" className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdFrom} onChange={e => setNewProdFrom(e.target.value)} />
                      </div>
                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Available Until</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t.availableUntil}</label>
                         <input type="date" className="w-full p-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500" value={newProdUntil} onChange={e => setNewProdUntil(e.target.value)} />
                      </div>
                   </div>
@@ -1057,7 +1325,7 @@ const App: React.FC = () => {
                      onClick={handleAddProduct}
                      className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-colors mt-4"
                   >
-                     Add Product
+                     {t.addProduct}
                   </button>
                </div>
             </div>
